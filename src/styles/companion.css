@@ -1,0 +1,25 @@
+/* ---------------------------------------------------------------------------
+ * Companion theme overrides — layered on top of BoardUI's styles/globals.css.
+ * 1. Retints BoardUI's accent ramp (CTA gradient, ghost buttons, selection
+ *    states, focus ring) from stock blue to Companion indigo #625BF6.
+ * 2. Wires the Inter variable font (loaded via @fontsource-variable/inter)
+ *    into the font stack BoardUI's typography expects (--font-inter).
+ * Semantic tokens (background/border/text) reference these variables, so every
+ * component re-tints automatically.
+ * -------------------------------------------------------------------------- */
+
+:root {
+  --font-inter: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-accent-50:  #f1f0fe;
+  --color-accent-100: #e5e3fd;
+  --color-accent-200: #cdc9fb;
+  --color-accent-300: #b0aaf9;
+  --color-accent-400: #9289f8;
+  --color-accent-500: #625bf6;
+  --color-accent-600: #4c46e2;
+  --color-accent-700: #3f39c4;
+  --color-accent-800: #3430a0;
+  --color-accent-900: #2d2a7e;
+  --color-accent-950: #1c1a4d;
+}
