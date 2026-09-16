@@ -200,7 +200,22 @@ export function buildSalesFollowupWorkflow() {
       if (!inputData.approved) {
         throw new Error(`envoi refusé par ${inputData.decidedBy ?? 'un décideur'} — terminaison propre, aucun email envoyé`)
       }
-      // Outil send_email MOCK — le vrai connecteur viendra après MCP.
+      // send_email : réel via Activepieces si configuré, sinon mock sandbox.
+      const ap = await import('../activepieces/provider.js')
+      const gmailTool = ap.getActiveTool('ap_gmail_send_email')
+      if (ap.isActivepiecesEnabled() && gmailTool) {
+        const { authorizeExternalTool } = await import('../activepieces/provider.js')
+        const ctx = getRunContext(inputData.runId)
+        await authorizeExternalTool(ctx.dbh, ctx.organizationId, 'copilot', 'ap_gmail_send_email', ctx.initiatorName ?? 'agent', inputData.approvalId)
+        const result = await gmailTool.execute(toolCtxOf(inputData.runId), {
+          to: inputData.approvalId, // le vrai to vient du preview de l'approval
+          subject: `Suivi — ${inputData.draft.slice(0, 60)}`,
+          body: inputData.draft,
+        })
+        await record(inputData.runId, 'send_email_activepieces', { gmailTool: 'ap_gmail_send_email' }, { sent: true, via: 'activepieces' })
+        return { runId: inputData.runId, draft: inputData.draft, sent: true }
+      }
+      // Mock sandbox — pas de vraie connexion.
       await record(inputData.runId, 'send_email_mock', { approvalId: inputData.approvalId }, { sent: true, sandbox: true })
       return { runId: inputData.runId, draft: inputData.draft, sent: true }
     },

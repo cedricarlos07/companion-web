@@ -16,5 +16,27 @@ services:
       timeout: 3s
       retries: 20
 
+  activepieces:
+    image: activepieces/activepieces:latest
+    container_name: companion-activepieces
+    ports:
+      - '5678:80'
+    environment:
+      AP_ENGINE_EXECUTION_ENVIRONMENT: production
+      AP_FRONTEND_URL: http://localhost:5678
+      AP_API_URL: http://localhost:5678
+      AP_ENVIRONMENT: production
+      AP_ENCRYPTION_KEY: companion-ap-encryption-key-32ch
+      AP_JWT_SECRET: companion-ap-jwt-secret
+      AP_POSTGRES_DATABASE: activepieces
+      AP_DB_TYPE: POSTGRES
+      AP_POSTGRES_HOST: postgres
+      AP_POSTGRES_PORT: '5432'
+      AP_POSTGRES_USERNAME: companion
+      AP_POSTGRES_PASSWORD: companion
+      AP_EXECUTION_MODE: UNSANDBOXED
+      AP_TELEMETRY_DISABLED: 'true'
+    restart: unless-stopped
+
 volumes:
   companion-pgdata:

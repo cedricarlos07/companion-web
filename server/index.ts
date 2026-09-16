@@ -12,6 +12,8 @@ import { memorySearchEngine, reindexMemoriesFromDb } from './memory/index.js'
 import { buildAgentRouter, ensureAgentsSeeded } from './mastra/routes-agents.js'
 import { mountMcpHttp } from './mcp/http.js'
 import { buildMcpManagementRouter } from './mcp/routes-mcp.js'
+import { buildActivepiecesRouter } from './activepieces/routes-ap.js'
+import { isActivepiecesEnabled, initializeExternalTools } from './activepieces/provider.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,6 +71,7 @@ async function main() {
   app.use('/api', buildApiRouter(dbh))
   app.use('/api', buildAgentRouter(dbh))
   app.use('/api/mcp', buildMcpManagementRouter(dbh))
+  app.use('/api/ap', buildActivepiecesRouter(dbh))
   mountMcpHttp(app, dbh)
 
   // Serve the built frontend (self-hosted single binary mode).
@@ -78,6 +81,13 @@ async function main() {
     app.get(/^\/(?!api\/).*/, (_req, res) => {
       res.sendFile(path.join(distDir, 'index.html'))
     })
+  }
+
+  // Activepieces : découverte des tools externes en arrière-plan.
+  if (isActivepiecesEnabled() && primaryOrgId) {
+    void initializeExternalTools(dbh, primaryOrgId)
+      .then((n) => n > 0 && console.log(`[companion] Activepieces : ${n} tools externes disponibles`))
+      .catch((err) => console.warn('[companion] Activepieces init échoué:', String(err).slice(0, 150)))
   }
 
   app.listen(config.port, () => {
