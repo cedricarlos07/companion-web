@@ -50,7 +50,7 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 
 export function issueToken(user: AuthedUser): string {
   return jwt.sign(
-    { sub: user.id, org: user.organizationId, role: user.appRole },
+    { sub: user.id, org: user.organizationId, role: user.appRole, name: user.name },
     config.jwtSecret,
     { expiresIn: '12h' },
   )
@@ -98,14 +98,14 @@ export function authRequired(dbh: DbHandle) {
     const token = req.cookies?.companion_session ?? bearer
     if (!token) return res.status(401).json({ error: 'non authentifié' })
     try {
-      const payload = jwt.verify(token, config.jwtSecret) as { sub: string; org: string; role: AppRole }
+      const payload = jwt.verify(token, config.jwtSecret) as { sub: string; org: string; role: AppRole; name?: string }
       // Role is re-read lazily from the token; org isolation always from the token.
       req.user = {
         id: payload.sub,
         organizationId: payload.org,
         appRole: payload.role,
         email: '',
-        name: '',
+        name: payload.name ?? '',
         employeeId: null,
       }
       next()

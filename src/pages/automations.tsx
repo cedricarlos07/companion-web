@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { Modal } from '@/components/common/modal'
@@ -15,6 +15,7 @@ import {
   WorkflowIcon,
 } from '@/lib/icons'
 import { AUTOMATIONS } from '@/data/workspace'
+import { api } from '@/services/api'
 import { useAppStore } from '@/store/app-store'
 import { cx } from '@/utils/cx'
 
@@ -34,6 +35,13 @@ const THEN_TEMPLATES = [
 export function AutomationsPage() {
   const { pushToast } = useAppStore()
   const [automations, setAutomations] = useState(AUTOMATIONS)
+  const [realTriggers, setRealTriggers] = useState<Record<string, unknown>[]>([])
+
+  useEffect(() => {
+    api.request<{ triggers: Record<string, unknown>[] }>('/triggers').then((res) => {
+      if (res?.triggers && res.triggers.length > 0) setRealTriggers(res.triggers)
+    })
+  }, [])
   const [builderOpen, setBuilderOpen] = useState(false)
   const [event, setEvent] = useState(EVENT_TEMPLATES[0])
   const [condition, setCondition] = useState('')
@@ -80,6 +88,23 @@ export function AutomationsPage() {
           </Button>
         }
       />
+
+      {realTriggers.length > 0 && (
+        <Card title="Triggers actifs (événements réels)" className="mb-4">
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {realTriggers.map((t) => (
+              <li key={String(t.id)} className="flex items-center gap-2.5 rounded-xl border border-border-button-default px-3.5 py-2.5">
+                <HugeIcon icon={BoltIcon} size="xs" className="shrink-0 text-accent-500" />
+                <span className="min-w-0 flex-1 truncate text-body-2-medium text-text-primary">{String(t.event_type)}</span>
+                <span className="shrink-0 text-caption-1-medium text-text-tertiary">{String(t.agent_key)}</span>
+                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-caption-2-medium ${t.enabled ? 'bg-status-lime-background text-status-lime-text' : 'bg-background-tertiary-default text-text-secondary'}`}>
+                  {t.enabled ? 'ON' : 'OFF'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <div className="space-y-3">
         {automations.map((a) => (

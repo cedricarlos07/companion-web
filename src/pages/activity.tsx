@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { HugeIcon } from '@/components/ui/huge-icon'
@@ -13,8 +13,9 @@ import {
   CheckmarkBadge01Icon,
 } from '@/lib/icons'
 import { ACTIVITY } from '@/data/workspace'
+import { api } from '@/services/api'
 import { cx } from '@/utils/cx'
-import type { ActivityKind } from '@/types'
+import type { ActivityEvent, ActivityKind } from '@/types'
 
 const KIND_META: Record<ActivityKind, { label: string; icon: typeof BotIcon }> = {
   agents: { label: 'Agents', icon: BotIcon },
@@ -46,9 +47,26 @@ const FILTERS: (ActivityKind | 'all')[] = [
 
 export function ActivityPage() {
   const [filter, setFilter] = useState<ActivityKind | 'all'>('all')
+  const [events, setEvents] = useState<ActivityEvent[]>(ACTIVITY)
+  useEffect(() => {
+    api.audit().then((real) => {
+      if (real && real.length > 0) {
+        setEvents(real.map((e) => ({
+          id: String(e.id),
+          time: String(e.created_at ?? '').slice(11, 16),
+          actor: String(e.actor_name ?? 'système'),
+          actorKind: String(e.actor_kind) as 'agent' | 'user' | 'admin',
+          action: String(e.action),
+          detail: JSON.stringify(e.detail ?? {}).slice(0, 120),
+          kind: String(e.action).startsWith('memory') || String(e.action).startsWith('ask') ? 'knowledge' : String(e.action).startsWith('handover') || String(e.action).startsWith('onboarding') || String(e.action).startsWith('agent') ? 'agents' : String(e.action).startsWith('approval') ? 'approvals' : 'security',
+          origin: String(e.actor_kind) === 'agent' ? 'autonomous' : 'human',
+        } as ActivityEvent)))
+      }
+    })
+  }, [])
 
   const list = useMemo(
-    () => (filter === 'all' ? ACTIVITY : ACTIVITY.filter((a) => a.kind === filter)),
+    () => (filter === 'all' ? events : events.filter((a) => a.kind === filter)),
     [filter],
   )
 

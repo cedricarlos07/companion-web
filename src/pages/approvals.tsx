@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { useAppStore } from '@/store/app-store'
+import type { Approval } from '@/types'
 import { Button } from '@/components/base/buttons/button'
 import { Tabs, TabList, Tab, TabPanel } from '@/components/base/tabs/tabs'
 import { EmptyState } from '@/components/common/states'
@@ -69,7 +70,7 @@ export function ApprovalsPage() {
           ) : (
             <div className="space-y-4">
               {pending.map((a) => (
-                <ApprovalCard key={a.id} id={a.id} onDecide={decide} />
+                <ApprovalCard key={a.id} id={a.id} approvalsState={approvals} onDecide={decide} />
               ))}
             </div>
           )}
@@ -84,7 +85,7 @@ export function ApprovalsPage() {
             ) : (
               <div className="space-y-4">
                 {(status === 'approved' ? approved : rejected).map((a) => (
-                  <ApprovalCard key={a.id} id={a.id} onDecide={decide} />
+                  <ApprovalCard key={a.id} id={a.id} approvalsState={approvals} onDecide={decide} />
                 ))}
               </div>
             )}
@@ -124,13 +125,15 @@ export function ApprovalsPage() {
 
 function ApprovalCard({
   id,
+  approvalsState,
   onDecide,
 }: {
   id: string
+  approvalsState: Approval[]
   onDecide: (id: string, decision: 'approved' | 'rejected') => void
 }) {
-  const { approvals, pushToast } = useAppStore()
-  const approval = approvals.find((a) => a.id === id)
+  const { pushToast } = useAppStore()
+  const approval = approvalsState.find((a) => a.id === id)
   if (!approval) return null
   const isPending = approval.status === 'pending'
 

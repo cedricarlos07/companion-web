@@ -9,6 +9,7 @@ import { config } from './config.js'
 import { ensureUploadsDir } from './services/ingestion.js'
 import { checkAiHealth } from './ai-settings.js'
 import { memorySearchEngine, reindexMemoriesFromDb } from './memory/index.js'
+import { buildAgentRouter, ensureAgentsSeeded } from './mastra/routes-agents.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +43,9 @@ async function main() {
     }
   }
 
+  // Agents V1 (allowlists explicites, deny par défaut).
+  await ensureAgentsSeeded(dbh)
+
   // État IA : modèles épinglés, dégradation annoncée — jamais de swap silencieux.
   const orgRows = await dbh.query<{ id: string }>(`SELECT id FROM organizations ORDER BY created_at LIMIT 1`)
   const primaryOrgId = orgRows[0]?.id
@@ -61,6 +65,7 @@ async function main() {
   }
 
   app.use('/api', buildApiRouter(dbh))
+  app.use('/api', buildAgentRouter(dbh))
 
   // Serve the built frontend (self-hosted single binary mode).
   const distDir = path.join(__dirname, '..', 'dist')

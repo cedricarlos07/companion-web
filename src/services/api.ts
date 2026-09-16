@@ -112,6 +112,11 @@ export function mapHandover(row: Record<string, unknown>): Handover & { raw: Rec
 /* ------------------------------ Endpoints --------------------------------- */
 
 export const api = {
+  /** Appel API brut typé — pour les écrans branchés progressivement. */
+  async request<T = unknown>(path: string): Promise<T | null> {
+    return call<T>(path)
+  },
+
   async status() {
     return call<{ engine: string; ai: { available: boolean; llmModel: string; embedModel: string }; counts: { memories: number; employees: number; documents: number } }>('/status')
   },

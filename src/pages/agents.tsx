@@ -5,11 +5,36 @@ import { AgentStatusBadge, AutonomyBadge } from '@/components/common/badges'
 import { Button } from '@/components/base/buttons/button'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
 import { BotIcon, PlusSignIcon, ArrowRight02Icon } from '@/lib/icons'
+import { useEffect, useState } from 'react'
+import { api } from '@/services/api'
 import { useAppStore } from '@/store/app-store'
+import type { Agent } from '@/types'
 
 export function AgentsPage() {
   const navigate = useNavigate()
-  const { agents, setAgentStatus, pushToast } = useAppStore()
+  const { agents: storeAgents, setAgentStatus, pushToast } = useAppStore()
+  const [agents, setAgents] = useState<Agent[]>(storeAgents)
+  useEffect(() => {
+    api.request('/agents').then((res) => {
+      const list = (res as { agents?: Record<string, unknown>[] } | null)?.agents
+      if (list && list.length > 0) {
+        setAgents(list.map((a) => ({
+          id: String(a.id),
+          name: String(a.name),
+          description: String(a.description ?? ''),
+          goal: String(a.goal ?? ''),
+          status: String(a.status ?? 'idle') as Agent['status'],
+          autonomy: String(a.autonomy ?? 'copilot') as Agent['autonomy'],
+          lastActivity: `${a.runs_total ?? 0} runs`,
+          skills: [],
+          tools: [],
+          memoryAccess: [],
+          permissions: [],
+          recent: [],
+        })))
+      }
+    })
+  }, [])
 
   return (
     <div>
