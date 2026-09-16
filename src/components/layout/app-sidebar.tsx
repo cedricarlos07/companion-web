@@ -98,8 +98,14 @@ export function AppSidebar() {
         </span>
         {!collapsed && (
           <span className="min-w-0">
-            <span className="block truncate text-headline-semibold text-white">Companion</span>
-            <span className="block truncate text-caption-1-medium text-white/50">
+            {/* Wordmark officiel « sur sombre » : la barre est noire dans les deux thèmes. */}
+            <img
+              src="/brand/companion-wordmark-on-dark.png"
+              alt="Companion"
+              className="h-4 w-auto"
+              draggable={false}
+            />
+            <span className="mt-1 block truncate text-caption-1-medium text-white/50">
               Votre entreprise n'oublie plus.
             </span>
           </span>

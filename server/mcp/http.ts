@@ -4,7 +4,7 @@ import type { DbHandle } from '../db/client.js'
 import { audit } from '../audit.js'
 import { verifyMcpToken, toCallContext } from './auth.js'
 import { buildCompanionMcpServer } from './server.js'
-import { checkRateLimit } from './policy-mcp.js'
+import { checkRateLimit } from '../rate-limiter.js'
 
 /**
  * Point d'entrée HTTP MCP (Streamable HTTP, mode stateless par requête).
@@ -28,8 +28,9 @@ export function mountMcpHttp(app: Express, dbh: DbHandle) {
       res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'token MCP invalide, expiré ou désactivé' }, id: null })
       return
     }
-    if (!checkRateLimit(client.id)) {
-      res.status(429).json({ jsonrpc: '2.0', error: { code: -32002, message: 'rate limit MCP dépassé (60 req/min)' }, id: null })
+    const rl = await checkRateLimit(`mcp:${client.id}`, 60)
+    if (!rl.allowed) {
+      res.status(429).json({ jsonrpc: '2.0', error: { code: -32002, message: `rate limit MCP dépassé (${60 - rl.remaining} req/min)` }, id: null })
       return
     }
 

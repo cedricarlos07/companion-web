@@ -36,7 +36,10 @@ services:
       AP_POSTGRES_PASSWORD: companion
       AP_EXECUTION_MODE: UNSANDBOXED
       AP_TELEMETRY_DISABLED: 'true'
+    volumes:
+      - activepieces-data:/usr/src/app/data
     restart: unless-stopped
 
 volumes:
   companion-pgdata:
+  activepieces-data:

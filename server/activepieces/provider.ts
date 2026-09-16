@@ -1,19 +1,3 @@
-/**
- * ExternalToolProvider — pont entre les agents Mastra et Activepieces MCP.
- *
- * Companion n'appelle jamais Gmail/Drive/Teams directement. Activepieces
- * expose ces applications via MCP ; ce provider les découvre, les enveloppe
- * dans la policy Companion et les met à disposition des workflows.
- *
- * Configuration :
- *   ACTIVEPIECES_URL=http://localhost:5678
- *   ACTIVEPIECES_MCP_TOKEN=cmpk_ext_…   (token Activepieces MCP)
- *   ACTIVEPIECES_ENABLED=true|false     (défaut : false)
- *
- * Dégradation : si Activepieces est absent, les tools externes disparaissent
- * proprement — les workflows internes continuent de fonctionner.
- */
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { config } from '../config.js'
@@ -22,15 +6,28 @@ import { audit } from '../audit.js'
 import { PolicyDeniedError } from '../mastra/policy.js'
 import type { ToolContext } from '../mastra/tools.js'
 
+/**
+ * Activepieces tool provider — registry explicite en base.
+ *
+ * RÈGLE FONDAMENTALE : découverte ≠ autorisation.
+ * Les tools découverts via MCP arrivent en `enabled = false` dans la table
+ * `ap_tool_registry`. Un administrateur doit les activer un par un. Un tool
+ * désactivé n'est JAMAIS exécutable, même si Activepieces le propose.
+ *
+ * Namespacing : chaque tool est préfixé par son nom d'app Activepieces
+ * (`gmail.send_email`, `google_drive.search_files`) pour éviter les collisions.
+ */
+
 export interface ExternalTool {
   name: string
-  description: string
-  /** Nom Activepieces d'origine (ex. "gmail_send_email", "google-drive_upload_file") */
   apName: string
+  description: string
+  appName: string
   riskLevel: 'low' | 'medium' | 'high'
-  externalSideEffect: true
-  inputSchema: Record<string, unknown>
-  execute: (ctx: ToolContext, input: Record<string, unknown>) => Promise<unknown>
+  sideEffect: boolean
+  requiresApproval: boolean
+  enabled: boolean
+  execute: (ctx: { dbh: DbHandle; organizationId: string; runId: string; initiatorName?: string }, input: Record<string, unknown>) => Promise<unknown>
 }
 
 export interface ExternalToolProviderHealth {
@@ -38,108 +35,158 @@ export interface ExternalToolProviderHealth {
   ok: boolean
   url: string
   toolCount: number
+  enabledCount: number
   tools: string[]
   lastError?: string
 }
 
-const EXT_TOOLS = new Map<string, ExternalTool>()
-let initialized = false
+const initialized = new Set<string>()
+
+/** Déduit le nom d'app Activepieces depuis le nom du tool MCP (ex. `gmail_send_email` → `gmail`). */
+function appNameFor(apToolName: string): string {
+  const underscore = apToolName.indexOf('_')
+  return underscore > 0 ? apToolName.slice(0, underscore) : 'activepieces'
+}
+
+function riskLevelFor(apToolName: string): 'low' | 'medium' | 'high' {
+  const name = apToolName.toLowerCase()
+  if (/send|create|delete|update|upload|reply|move|share|approve/i.test(name)) return 'high'
+  if (/search|list|get|read/i.test(name)) return 'low'
+  return 'medium'
+}
+
+function requiresApprovalFor(apToolName: string): boolean {
+  return riskLevelFor(apToolName) !== 'low'
+}
+
+/**
+ * Découvre les tools Activepieces, les enregistre en base (disabled par
+ * défaut), puis construit les wrappers exécutables pour les tools activés.
+ */
+export async function initializeExternalTools(dbh: DbHandle, organizationId: string): Promise<number> {
+  if (!isActivepiecesEnabled()) return 0
+  if (initialized.has(organizationId)) return getEnabledCount(dbh, organizationId)
+
+  const mcpUrl = process.env.ACTIVEPIECES_MCP_URL ?? `${process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'}/api/v1/mcp`
+  const token = process.env.ACTIVEPIECES_MCP_TOKEN
+  let discovered = 0
+
+  try {
+    const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
+      requestInit: { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    })
+    const client = new Client({ name: 'companion-discovery', version: '1.0.0' })
+    await client.connect(transport)
+    const { tools } = await client.listTools()
+    await client.close()
+
+    for (const tool of tools) {
+      const apName = tool.name
+      const appName = appNameFor(apName)
+      const namespaced = `${appName}.${apName}`
+      const risk = riskLevelFor(apName)
+
+      // INSERT disabled par défaut — l'admin active manuellement.
+      await dbh.exec(`
+        INSERT INTO ap_tool_registry (organization_id, ap_name, namespaced_name, app_name, description, risk_level, side_effect, requires_approval, enabled)
+        VALUES ('${organizationId}', '${apName.replace(/'/g, "''")}', '${namespacedName(namespaced)}', '${appName.replace(/'/g, "''")}',
+                '${(tool.description ?? '').replace(/'/g, "''").slice(0, 500)}', '${risk}', true, ${requiresApprovalFor(apName)}, false)
+        ON CONFLICT (organization_id, ap_name) DO UPDATE SET description = excluded.description, discovered_at = now()
+      `).catch(() => undefined)
+      discovered++
+    }
+
+    initialized.add(organizationId)
+    const enabledCount = await getEnabledCount(dbh, organizationId)
+    console.log(`[activepieces] ${discovered} tools découverts, ${enabledCount} activés en registry`)
+    return enabledCount
+  } catch (err) {
+    console.warn(`[activepieces] découverte échouée : ${String(err).slice(0, 200)}`)
+    return 0
+  }
+}
+
+function namespacedName(ns: string): string {
+  return ns
+}
+
+async function getEnabledCount(dbh: DbHandle, organizationId: string): Promise<number> {
+  const rows = await dbh
+    .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM ap_tool_registry WHERE organization_id = '${organizationId}' AND enabled = true`)
+    .catch(() => [])
+  return Number(rows[0]?.cnt ?? 0)
+}
+
+/** Exécute un tool externe activé — vérifie la registry AVANT tout. */
+export async function executeExternalTool(
+  dbh: DbHandle,
+  organizationId: string,
+  namespacedName: string,
+  input: Record<string, unknown>,
+  runId: string,
+  initiatorName?: string,
+): Promise<unknown> {
+  const registry = await dbh
+    .query<{ enabled: boolean; ap_name: string; risk_level: string }>(
+      `SELECT enabled, ap_name, risk_level FROM ap_tool_registry WHERE organization_id = '${organizationId}' AND namespaced_name = '${namespacedName.replace(/'/g, "''")}'`,
+    )
+    .catch(() => [])
+
+  const entry = registry[0]
+  if (!entry) throw new PolicyDeniedError(`tool "${namespacedName}" non enregistré`, 'tool_not_allowed')
+  if (!entry.enabled) throw new PolicyDeniedError(`tool "${namespacedName}" désactivé — activez-le dans la registry`, 'tool_not_allowed')
+
+  const mcpUrl = process.env.ACTIVEPIECES_MCP_URL ?? `${process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'}/api/v1/mcp`
+  const token = process.env.ACTIVEPIECES_MCP_TOKEN
+  const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
+    requestInit: { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  })
+  const client = new Client({ name: 'companion-executor', version: '1.0.0' })
+  await client.connect(transport)
+  try {
+    const result = await client.callTool({ name: entry.ap_name, arguments: input })
+    await audit(dbh, organizationId, {
+      actorName: initiatorName ?? 'agent', actorKind: 'agent',
+      action: 'external.tool.executed', targetType: 'external_tool', targetId: entry.ap_name,
+      detail: { namespaced: namespacedName, runId },
+    })
+    return result
+  } finally {
+    await client.close()
+  }
+}
+
+/** Active/désactive un tool dans la registry (admin). */
+export async function setToolEnabled(dbh: DbHandle, organizationId: string, namespacedName: string, enabled: boolean, enabledBy: string) {
+  await dbh.exec(
+    `UPDATE ap_tool_registry SET enabled = ${enabled}, enabled_at = ${enabled ? 'now()' : 'NULL'}, enabled_by = '${enabled ? enabledBy.replace(/'/g, "''") : 'NULL'}'
+     WHERE organization_id = '${organizationId}' AND namespaced_name = '${namespacedName.replace(/'/g, "''")}'`,
+  )
+}
 
 export function isActivepiecesEnabled(): boolean {
   return process.env.ACTIVEPIECES_ENABLED === 'true' && Boolean(process.env.ACTIVEPIECES_URL)
 }
 
-function activepiecesUrl(): string {
-  return process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'
-}
-
-function activepiecesMcpUrl(): string {
-  const base = activepiecesUrl()
-  return process.env.ACTIVEPIECES_MCP_URL ?? `${base}/api/v1/mcp`
-}
-
-/** Évalue le risque d'un tool Activepieces par son nom. */
-function riskLevelFor(apToolName: string): 'low' | 'medium' | 'high' {
-  const name = apToolName.toLowerCase()
-  if (/send|create|delete|update|upload|reply|move|share/i.test(name)) return 'high'
-  if (/search|list|get|read/i.test(name)) return 'low'
-  return 'medium'
-}
-
-/** Connecte au serveur MCP Activepieces et découvre les tools. */
-export async function initializeExternalTools(dbh: DbHandle, organizationId: string): Promise<number> {
-  if (!isActivepiecesEnabled() || initialized) return EXT_TOOLS.size
-  initialized = true
-
-  try {
-    const mcpUrl = activepiecesMcpUrl()
-    const token = process.env.ACTIVEPIECES_MCP_TOKEN
-    const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
-      requestInit: {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      },
-    })
-    const client = new Client({ name: 'companion-external', version: '1.0.0' })
-    await client.connect(transport)
-
-    const { tools } = await client.listTools()
-
-    for (const tool of tools) {
-      const apName = tool.name
-      const name = `ap_${apName}`
-      const risk = riskLevelFor(apName)
-
-      EXT_TOOLS.set(name, {
-        name,
-        description: tool.description ?? `Activepieces: ${apName}`,
-        apName,
-        riskLevel: risk,
-        externalSideEffect: true,
-        inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
-        execute: async (ctx: ToolContext, input: Record<string, unknown>) => {
-          // Appel MCP réel vers Activepieces.
-          const result = await client.callTool({ name: apName, arguments: input })
-          await audit(dbh, ctx.organizationId, {
-            actorName: ctx.initiatorName ?? 'agent',
-            actorKind: 'agent',
-            action: 'external.tool.executed',
-            targetType: 'external_tool',
-            targetId: apName,
-            detail: { tool: apName, runId: ctx.runId },
-          })
-          return result
-        },
-      })
-    }
-
-    await client.close()
-    console.log(`[activepieces] ${EXT_TOOLS.size} tools externes découverts depuis ${mcpUrl}`)
-  } catch (err) {
-    console.warn(`[activepieces] connexion échouée — tools externes indisponibles : ${String(err).slice(0, 200)}`)
+export async function externalHealth(): Promise<{
+  enabled: boolean; ok: boolean; url: string; discoveredCount: number; enabledCount: number; lastError?: string
+}> {
+  const enabled = isActivepiecesEnabled()
+  let enabledCount = 0
+  let discoveredCount = 0
+  void enabledCount
+  return {
+    enabled,
+    ok: enabled && initialized.size > 0,
+    url: process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678',
+    discoveredCount,
+    enabledCount,
+    lastError: initialized.size === 0 ? 'pas encore initialisé' : undefined,
   }
-
-  return EXT_TOOLS.size
 }
 
-export function getExternalTools(): ExternalTool[] {
-  return [...EXT_TOOLS.values()]
-}
 
-export function getActiveTool(name: string): ExternalTool | undefined {
-  return EXT_TOOLS.get(name)
-}
-
-export function getExternalTool(name: string): ExternalTool | undefined {
-  return EXT_TOOLS.get(name)
-}
-
-/**
- * Policy pour les tools externes — PLUS STRICTE que les tools internes :
- *   assistant    → toujours refusé (jamais d'effet externe)
- *   copilot      → approbation obligatoire AVANT exécution
- *   autopilot    → autorisé uniquement si le tool est explicitement pré-autorisé
- * Le respect de ces règles est vérifié dans la policy layer, pas ici.
- */
+/** Compat : policy pour tools externes (autonomie + approbation). */
 export async function authorizeExternalTool(
   dbh: DbHandle,
   organizationId: string,
@@ -151,7 +198,6 @@ export async function authorizeExternalTool(
   if (!isActivepiecesEnabled()) {
     throw new PolicyDeniedError('Activepieces non configuré — tools externes indisponibles', 'kill_switch')
   }
-
   if (agentAutonomy === 'assistant') {
     await audit(dbh, organizationId, {
       actorName: initiatorName, actorKind: 'agent',
@@ -160,27 +206,19 @@ export async function authorizeExternalTool(
     })
     throw new PolicyDeniedError('autonomie assistant : aucun tool à effet externe autorisé', 'autonomy_denied')
   }
-
   if (agentAutonomy === 'copilot' && !approvedApprovalId) {
     await audit(dbh, organizationId, {
       actorName: initiatorName, actorKind: 'agent',
       action: 'policy.denied', targetType: 'external_tool', targetId: toolName,
-      detail: { reason: 'autonomy=copilot : approbation humaine obligatoire avant effet externe' },
+      detail: { reason: 'autonomy=copilot : approbation humaine obligatoire' },
     })
     throw new PolicyDeniedError('approbation humaine obligatoire avant effet externe', 'autonomy_denied')
   }
-
-  // autopilot_limited : autorisé — les limites (budget, fréquence) sont gérées par le runner.
 }
 
-export async function externalHealth(): Promise<ExternalToolProviderHealth> {
-  const enabled = isActivepiecesEnabled()
-  return {
-    enabled,
-    ok: enabled && EXT_TOOLS.size > 0,
-    url: activepiecesUrl(),
-    toolCount: EXT_TOOLS.size,
-    tools: [...EXT_TOOLS.keys()].slice(0, 20),
-    lastError: initialized && EXT_TOOLS.size === 0 ? 'connexion Activepieces échouée au démarrage' : undefined,
-  }
+/** Compat : liste les tools externes activés en registry. */
+export async function getEnabledTools(dbh: DbHandle, organizationId: string): Promise<{ namespaced_name: string; risk_level: string }[]> {
+  return dbh.query<{ namespaced_name: string; risk_level: string }>(
+    `SELECT namespaced_name, risk_level FROM ap_tool_registry WHERE organization_id = '${organizationId}' AND enabled = true`,
+  ).catch(() => [])
 }

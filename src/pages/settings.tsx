@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, type Key } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { setTheme, useTheme } from '@/lib/theme'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { ProgressRow } from '@/components/common/progress'
@@ -58,6 +59,7 @@ export function SettingsPage() {
   const navigate = useNavigate()
   const { pushToast } = useAppStore()
   const [section, setSection] = useState<SectionId>('general')
+  const themeChoice = useTheme()
 
   return (
     <div>
@@ -372,11 +374,19 @@ export function SettingsPage() {
           {section === 'appearance' && (
             <SettingsCard title="Apparence">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Selectled label="Thème" defaultValue="Clair" items={['Clair', 'Sombre', 'Système']} />
+                <Selectled
+                  label="Thème"
+                  items={['Clair', 'Sombre', 'Système']}
+                  selectedKey={themeChoice === 'light' ? 'Clair' : themeChoice === 'dark' ? 'Sombre' : 'Système'}
+                  onSelectionChange={(k) =>
+                    setTheme(k === 'Clair' ? 'light' : k === 'Sombre' ? 'dark' : 'system')
+                  }
+                />
                 <Selectled label="Densité" defaultValue="Confortable" items={['Confortable', 'Compact']} />
               </div>
               <p className="mt-3 text-caption-1-medium text-text-tertiary">
-                Thème clair par défaut — identité visuelle Companion.
+                Clair, sombre ou synchronisé avec votre système — le vert Companion reste l'accent
+                dans les deux modes.
               </p>
             </SettingsCard>
           )}
@@ -546,20 +556,30 @@ function Selectled({
   label,
   defaultValue,
   items,
+  selectedKey,
+  onSelectionChange,
 }: {
   label: string
   defaultValue: string
   items: string[]
+  /** Contrôlé : value + callback (sinon le select reste sur defaultValue). */
+  selectedKey?: string
+  onSelectionChange?: (key: string) => void
 }) {
   return (
     <div>
       <p className="mb-1 text-body-2-medium text-text-primary">{label}</p>
       <Select
         aria-label={label}
-        defaultSelectedKey={defaultValue}
+        {...(selectedKey !== undefined
+          ? {
+              selectedKey,
+              onSelectionChange: (k: Key) => onSelectionChange?.(String(k)),
+            }
+          : { defaultSelectedKey: defaultValue })}
         items={items.map((i) => ({ id: i, label: i }))}
         className="w-full"
-        renderValue={<span className="truncate text-body-medium">{defaultValue}</span>}
+        renderValue={<span className="truncate text-body-medium">{selectedKey ?? defaultValue}</span>}
       >
         {items.map((i) => (
           <SelectItem key={i} id={i} textValue={i}>

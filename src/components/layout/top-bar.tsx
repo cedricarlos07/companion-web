@@ -20,6 +20,7 @@ import {
   Search01Icon,
 } from '@/lib/icons'
 import { useAppStore } from '@/store/app-store'
+import { ThemeToggle } from '@/components/common/theme-toggle'
 import type { AppNotification } from '@/types'
 
 const CATEGORY_META: Record<
@@ -63,6 +64,8 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
       </span>
 
       <div className="flex-1" />
+
+      <ThemeToggle />
 
       <Tooltip>
         <TooltipTrigger>

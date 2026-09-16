@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
+import { adaptIcon } from '@/components/ui/huge-icon'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
-import { AiBrain01Icon, LoginIcon, ShieldUserIcon } from '@/lib/icons'
+import { LoginIcon, ShieldUserIcon } from '@/lib/icons'
 import { ORG } from '@/data/org'
 import { api } from '@/services/api'
 
@@ -39,9 +39,20 @@ export function LoginPage() {
       <div className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center text-center">
-            <span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-companion-300 shadow-sm">
-              <HugeIcon icon={AiBrain01Icon} size="md" className="text-brand-black" />
-            </span>
+            {/* Wordmark officiel : noir sur clair, vert sur sombre (brand kit v1.0). */}
+            <img
+              src="/brand/companion-wordmark-on-light.png"
+              alt="Companion"
+              className="theme-logo-light mx-auto mb-4 h-9 w-auto"
+              draggable={false}
+            />
+            <img
+              src="/brand/companion-wordmark-on-dark.png"
+              alt=""
+              aria-hidden="true"
+              className="theme-logo-dark mx-auto mb-4 h-9 w-auto"
+              draggable={false}
+            />
             <h1 className="text-title-1-medium text-text-primary">Bienvenue dans Companion</h1>
             <p className="mt-1.5 text-body-medium text-text-secondary">
               La mémoire opérationnelle de votre entreprise.

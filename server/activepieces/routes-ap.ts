@@ -3,7 +3,7 @@ import type { DbHandle } from '../db/client.js'
 import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
 import { dispatchEvent } from '../mastra/triggers.js'
-import { isActivepiecesEnabled, initializeExternalTools, getExternalTools, externalHealth } from '../activepieces/provider.js'
+import { isActivepiecesEnabled, initializeExternalTools, externalHealth } from '../activepieces/provider.js'
 import { ingestDocument } from '../services/ingestion.js'
 
 /**
@@ -85,8 +85,11 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
 
   /** Liste les tools externes Activepieces disponibles. */
   router.get('/ap/tools', authRequired(dbh), async (_req, res) => {
-    const tools = getExternalTools()
-    res.json({ tools: tools.map((t) => ({ name: t.name, description: t.description, riskLevel: t.riskLevel })), count: tools.length })
+    const enabled = await dbh.query(
+      `SELECT namespaced_name, description, risk_level FROM ap_tool_registry
+       WHERE organization_id = (SELECT id FROM organizations ORDER BY created_at LIMIT 1) AND enabled = true`,
+    )
+    res.json({ tools: enabled, count: enabled.length })
   })
 
   return router

@@ -75,6 +75,16 @@ export async function ingestDocument(
   documentId: string,
   actorName: string,
 ): Promise<IngestResult> {
+  // Anti-réingestion : si le document a déjà un external_id, vérifier qu'il n'existe pas déjà.
+  const dup = await dbh.query<{ cnt: string }>(
+    `SELECT count(*)::text AS cnt FROM documents d1
+     WHERE d1.id = '${documentId}' AND d1.external_id IS NOT NULL
+       AND EXISTS (SELECT 1 FROM documents d2 WHERE d2.external_id = d1.external_id AND d2.id <> d1.id AND d2.organization_id = d1.organization_id)`,
+  )
+  if (Number(dup[0]?.cnt ?? 0) > 0) {
+    await dbh.exec(`UPDATE documents SET status = 'failed', status_detail = 'déjà ingéré (external_id dupliqué)' WHERE id = '${documentId}'`)
+    return { documentId, pagesApprox: 0, chunksIndexed: 0, candidatesFound: 0, memoriesCreated: 0, confirmations: 0, conflicts: 0, engine: 'heuristic' }
+  }
   const docs = await dbh.query<{
     id: string; organization_id: string; title: string; mime_type: string;
     storage_path: string | null; raw_text: string | null; source_id: string | null;

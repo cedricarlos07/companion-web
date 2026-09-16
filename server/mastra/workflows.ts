@@ -202,17 +202,16 @@ export function buildSalesFollowupWorkflow() {
       }
       // send_email : réel via Activepieces si configuré, sinon mock sandbox.
       const ap = await import('../activepieces/provider.js')
-      const gmailTool = ap.getActiveTool('ap_gmail_send_email')
-      if (ap.isActivepiecesEnabled() && gmailTool) {
-        const { authorizeExternalTool } = await import('../activepieces/provider.js')
+      if (ap.isActivepiecesEnabled()) {
         const ctx = getRunContext(inputData.runId)
-        await authorizeExternalTool(ctx.dbh, ctx.organizationId, 'copilot', 'ap_gmail_send_email', ctx.initiatorName ?? 'agent', inputData.approvalId)
-        const result = await gmailTool.execute(toolCtxOf(inputData.runId), {
-          to: inputData.approvalId, // le vrai to vient du preview de l'approval
-          subject: `Suivi — ${inputData.draft.slice(0, 60)}`,
+        const { authorizeExternalTool } = await import('../activepieces/provider.js')
+        await authorizeExternalTool(ctx.dbh, ctx.organizationId, 'copilot', 'gmail.send_email', ctx.initiatorName ?? 'agent', inputData.approvalId)
+        const result = await ap.executeExternalTool(ctx.dbh, ctx.organizationId, 'gmail.send_email', {
+          to: 'contact@kamaloka.ci',
+          subject: 'Suivi client',
           body: inputData.draft,
-        })
-        await record(inputData.runId, 'send_email_activepieces', { gmailTool: 'ap_gmail_send_email' }, { sent: true, via: 'activepieces' })
+        }, inputData.runId, ctx.initiatorName ?? 'agent')
+        await record(inputData.runId, 'send_email_activepieces', { via: 'activepieces' }, { sent: true })
         return { runId: inputData.runId, draft: inputData.draft, sent: true }
       }
       // Mock sandbox — pas de vraie connexion.
