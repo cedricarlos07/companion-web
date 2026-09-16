@@ -67,22 +67,21 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
 
       <ThemeToggle />
 
-      <Tooltip>
-        <TooltipTrigger>
-          <Button
-            variant="secondary"
-            size="small"
-            leadingIcon={adaptIcon(PlusSignIcon, 18)}
-            onClick={() => {
-              navigate('/sources/new')
-              pushToast('Choisissez un type de source à connecter.', 'info')
-            }}
-          >
-            Ajouter une source
-          </Button>
-        </TooltipTrigger>
-        Importer une nouvelle source de connaissances
-      </Tooltip>
+      {/* API BoardUI : TooltipTrigger englobe le déclencheur ET la surface. */}
+      <TooltipTrigger>
+        <Button
+          variant="secondary"
+          size="small"
+          leadingIcon={adaptIcon(PlusSignIcon, 18)}
+          onClick={() => {
+            navigate('/sources/new')
+            pushToast('Choisissez un type de source à connecter.', 'info')
+          }}
+        >
+          Ajouter une source
+        </Button>
+        <Tooltip>Importer une nouvelle source de connaissances</Tooltip>
+      </TooltipTrigger>
 
       <div className="relative">
         <IconButton

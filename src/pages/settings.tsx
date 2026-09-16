@@ -560,7 +560,7 @@ function Selectled({
   onSelectionChange,
 }: {
   label: string
-  defaultValue: string
+  defaultValue?: string
   items: string[]
   /** Contrôlé : value + callback (sinon le select reste sur defaultValue). */
   selectedKey?: string
@@ -574,7 +574,7 @@ function Selectled({
         {...(selectedKey !== undefined
           ? {
               selectedKey,
-              onSelectionChange: (k: Key) => onSelectionChange?.(String(k)),
+              onSelectionChange: (k: Key | null) => onSelectionChange?.(k == null ? '' : String(k)),
             }
           : { defaultSelectedKey: defaultValue })}
         items={items.map((i) => ({ id: i, label: i }))}

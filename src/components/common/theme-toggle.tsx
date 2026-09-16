@@ -15,16 +15,14 @@ export function ThemeToggle() {
   const label = resolved === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'
 
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <IconButton
-          size="small"
-          icon={adaptIcon(resolved === 'dark' ? SunIcon : Moon02Icon, 20)}
-          aria-label={label}
-          onClick={() => setTheme(resolved === 'dark' ? 'light' : 'dark')}
-        />
-      </TooltipTrigger>
-      {label}
-    </Tooltip>
+    <TooltipTrigger>
+      <IconButton
+        size="small"
+        icon={adaptIcon(resolved === 'dark' ? SunIcon : Moon02Icon, 20)}
+        aria-label={label}
+        onClick={() => setTheme(resolved === 'dark' ? 'light' : 'dark')}
+      />
+      <Tooltip>{label}</Tooltip>
+    </TooltipTrigger>
   )
 }

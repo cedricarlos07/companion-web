@@ -103,7 +103,9 @@
     "Satoshi Variable", "Satoshi", "Inter Variable", ui-sans-serif, system-ui,
     sans-serif;
 
-  /* Companion green ramp (brand kit v1.0; 950 derived from 900). */
+  /* Companion green ramp (brand kit v1.0; 950 derived from 900). Unscoped:
+   * the green accent applies in dark mode too (theme.css never re-tints
+   * accent-* under .dark). */
   --color-accent-50:  #f7ffef;
   --color-accent-100: #edffda;
   --color-accent-200: #ddfdbb;
@@ -116,9 +118,22 @@
   --color-accent-900: #3b5d23;
   --color-accent-950: #2c451a;
 
+  /* Primary CTA — the visual signature: flat Companion green, ink label.
+   * Flat same-stop "gradients" keep BoardUI's gradient-swap button mechanic
+   * (hover layer on ::before) working untouched. Disabled stays BoardUI's
+   * neutral ramp. Brand CTA in both themes. */
+  --gradient-button-primary-default: linear-gradient(180deg, #c4f68c 0%, #c4f68c 100%);
+  --gradient-button-primary-hover:   linear-gradient(180deg, #b5ed75 0%, #b5ed75 100%);
+  --gradient-button-primary-active:  linear-gradient(180deg, #aeeb69 0%, #aeeb69 100%);
+  --color-button-primary-foreground: var(--companion-black);
+}
+
+/* Light-only product ground. Scoped to :root:not(.dark): these all collide
+ * (equal specificity, later source order) with theme.css' `.dark` values, so
+ * an unscoped :root here would flatten dark mode back to light surfaces. */
+:root:not(.dark) {
   /* Product ground: #F3F4F6 app background, #F8F9FA secondary surface,
-   * white cards. Dark mode keeps BoardUI's neutral ramp (these are :root
-   * only; the .dark block in theme.css wins on specificity). */
+   * white cards. */
   --color-background-full:              var(--companion-background);
   --color-background-secondary-default: var(--companion-surface-secondary);
   --color-background-secondary-hover:   #eff1f3;
@@ -128,15 +143,6 @@
    * labels stay legible on #EDFFDA. */
   --color-button-ghost-foreground: var(--color-accent-800);
   --color-badge-new-text:          var(--color-accent-800);
-
-  /* Primary CTA — the visual signature: flat Companion green, ink label.
-   * Flat same-stop "gradients" keep BoardUI's gradient-swap button mechanic
-   * (hover layer on ::before) working untouched. Disabled stays BoardUI's
-   * neutral ramp. */
-  --gradient-button-primary-default: linear-gradient(180deg, #c4f68c 0%, #c4f68c 100%);
-  --gradient-button-primary-hover:   linear-gradient(180deg, #b5ed75 0%, #b5ed75 100%);
-  --gradient-button-primary-active:  linear-gradient(180deg, #aeeb69 0%, #aeeb69 100%);
-  --color-button-primary-foreground: var(--companion-black);
 }
 
 @theme inline {
