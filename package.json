@@ -11,7 +11,8 @@
     "dev:server:watch": "tsx watch server/index.ts",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
     "test:demo": "node scripts/demo-test.mjs",
-    "start": "tsx server/index.ts"
+    "start": "tsx server/index.ts",
+    "test:memory-providers": "node scripts/test-memory-providers.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
@@ -23,14 +24,17 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-table": "^8.21.3",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.12.3",
+    "mem0ai": "^3.1.8",
     "motion": "^12.42.2",
     "multer": "^2.4.0",
+    "ollama": "^0.6.3",
     "pdf-parse": "^2.4.5",
     "pg": "^8.23.0",
     "react": "^19.1.0",

@@ -408,15 +408,60 @@ export function buildApiRouter(dbh: DbHandle): Router {
   /* -------------------------------- Ask ----------------------------------- */
 
   api.post('/ask', authRequired(dbh), async (req, res) => {
-    const { question, roleId, employeeId, departmentId, type } = req.body as Record<string, string | undefined>
+    const { question, roleId, employeeId, departmentId, type, engine } = req.body as Record<string, string | undefined>
     if (!question || question.trim().length < 3) return res.status(400).json({ error: 'question requise' })
+
+    // Permissions propagées au retrieval : l'acteur détermine la clause d'accès.
+    let departmentIdResolved: string | undefined = departmentId
+    let employeeIdResolved: string | undefined = employeeId
+    if (req.user!.appRole === 'employee' && req.user!.employeeId) {
+      employeeIdResolved = employeeIdResolved ?? req.user!.employeeId ?? undefined
+      const emp = await dbh.query<{ department_id: string | null }>(`SELECT department_id FROM employees WHERE id = '${req.user!.employeeId}'`)
+      departmentIdResolved = departmentIdResolved ?? emp[0]?.department_id ?? undefined
+    }
+
     const result = await askCompanion(dbh, req.user!.organizationId, question.trim(), {
-      roleId, employeeId, departmentId, type,
-    })
+      roleId, employeeId: employeeIdResolved, departmentId: departmentIdResolved, type,
+    }, {
+      kind: 'user',
+      organizationId: req.user!.organizationId,
+      appRole: req.user!.appRole,
+      employeeId: req.user!.employeeId,
+      departmentId: departmentIdResolved,
+    }, engine === 'native' || engine === 'mem0' || engine === 'hybrid' ? engine : undefined)
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'ask.question', targetType: 'ask', detail: { question: question.slice(0, 200), abstained: result.abstained },
     })
     res.json(result)
+  })
+
+  /* ------------------------ System : mémoire + IA -------------------------- */
+
+  api.get('/system/memory-provider/health', authRequired(dbh), async (req, res) => {
+    const { getMemoryProvider, memorySearchEngine } = await import('./memory/index.js')
+    const { checkAiHealth } = await import('./ai-settings.js')
+    const provider = await getMemoryProvider(dbh, req.user!.organizationId)
+    const providerHealth = await provider.health()
+    const ai = await checkAiHealth(dbh, req.user!.organizationId)
+    res.json({ engine: memorySearchEngine(), provider: providerHealth, ai })
+  })
+
+  api.get('/system/ai/settings', authRequired(dbh), async (req, res) => {
+    const { getAiSettings } = await import('./ai-settings.js')
+    res.json({ settings: await getAiSettings(dbh, req.user!.organizationId) })
+  })
+
+  api.post('/system/ai/settings', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { setAiSettings } = await import('./ai-settings.js')
+    const { chatModel, embedModel } = req.body as { chatModel?: string; embedModel?: string }
+    const next = await setAiSettings(dbh, req.user!.organizationId, {
+      ...(chatModel ? { chatModel } : {}),
+      ...(embedModel ? { embedModel } : {}),
+    })
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'system.ai_settings_changed', detail: { chatModel: next.chatModel, embedModel: next.embedModel },
+    })
+    res.json({ settings: next })
   })
 
   /* --------------------------- Knowledge Risk ------------------------------ */

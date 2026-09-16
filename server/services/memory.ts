@@ -266,6 +266,24 @@ export async function updateMemory(
       .where(eq(memories.id, memoryId))
   }
 
+  // Sync vers le provider mémoire (Mem0) quand la mémoire devient fiable.
+  if (patch.status === 'verified' || patch.status === 'active') {
+    const rowsAfter = await dbh.query<{
+      id: string; type: string; title: string; content: string; scope: string; status: string;
+      confidence: number; employee_id: string | null; role_id: string | null; department_id: string | null;
+      organization_id: string;
+    }>(`SELECT * FROM memories WHERE id = '${memoryId}'`)
+    const after = rowsAfter[0]
+    if (after) {
+      const { syncMemoryToProvider } = await import('../memory/index.js')
+      await syncMemoryToProvider(dbh, after.organization_id, {
+        id: after.id, type: after.type, title: after.title, content: after.content,
+        scope: after.scope, status: after.status, confidence: after.confidence,
+        employeeId: after.employee_id, roleId: after.role_id, departmentId: after.department_id,
+      })
+    }
+  }
+
   const updated = await dbh.query(`SELECT * FROM memories WHERE id = '${memoryId}'`)
   return updated[0]
 }

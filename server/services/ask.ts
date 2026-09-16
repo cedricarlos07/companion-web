@@ -1,6 +1,8 @@
 import type { DbHandle } from '../db/client.js'
 import { embed, toPgVectorLiteral } from './embeddings.js'
 import { ollamaChat, ollamaStatus } from '../providers/ollama.js'
+import { memorySearchEngine, getMemoryProvider } from '../memory/index.js'
+import { memoryAccessClause, type MemoryActor } from '../memory/access.js'
 
 /**
  * Ask Companion — hybrid retrieval over the Company Brain:
@@ -66,12 +68,16 @@ export async function askCompanion(
   organizationId: string,
   question: string,
   filters: AskFilters = {},
+  actor?: MemoryActor,
+  engineOverride?: 'native' | 'mem0' | 'hybrid',
 ): Promise<AskResult> {
-  const { vector, provider } = await embed(question)
+  const { vector, provider: embedProvider } = await embed(question)
+  const accessClause = memoryAccessClause(actor ?? { kind: 'user', organizationId, appRole: 'owner' }, organizationId)
 
   const filterClauses: string[] = [
     `m.organization_id = '${organizationId}'`,
     `m.status IN ('verified', 'active', 'candidate', 'contradicted')`,
+    accessClause,
   ]
   if (filters.type) filterClauses.push(`m.type = '${filters.type}'`)
   if (filters.scope) filterClauses.push(`m.scope = '${filters.scope}'`)
@@ -79,52 +85,15 @@ export async function askCompanion(
   if (filters.employeeId) filterClauses.push(`(m.employee_id = '${filters.employeeId}' OR m.contributor = (SELECT first_name || ' ' || last_name FROM employees WHERE id = '${filters.employeeId}'))`)
   if (filters.departmentId) filterClauses.push(`m.department_id = '${filters.departmentId}'`)
 
-  // Hybrid retrieval: semantic candidates pre-ranked by pgvector, then boosted.
-  const semanticClause = provider === 'ollama'
-    ? `1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector)`
-    : `1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector)`
-
-  const rows = await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
-    WITH semantic AS (
-      SELECT m.id,
-             1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector) AS semantic
-      FROM memories m
-      WHERE ${filterClauses.join('\n        AND ')}
-        AND m.embedding IS NOT NULL
-      ORDER BY m.embedding <=> '${toPgVectorLiteral(vector)}'::vector
-      LIMIT 40
-    ),
-    lexical AS (
-      SELECT m.id,
-             CASE WHEN m.title || ' ' || m.content ILIKE ${likePattern(question)} THEN 1 ELSE 0 END AS text_match
-      FROM memories m
-      WHERE ${filterClauses.join('\n        AND ')}
-    )
-    SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
-           m.contributor, m.updated_at::text AS updated_at,
-           COALESCE(s.semantic, 0) AS semantic,
-           COALESCE(l.text_match, 0) AS text_match,
-           (SELECT d.title FROM memory_sources ms JOIN documents d ON d.id = ms.document_id
-            WHERE ms.memory_id = m.id AND d.title IS NOT NULL LIMIT 1) AS document_title,
-           (SELECT ms.excerpt FROM memory_sources ms WHERE ms.memory_id = m.id LIMIT 1) AS excerpt
-    FROM memories m
-    JOIN semantic s ON s.id = m.id
-    LEFT JOIN lexical l ON l.id = m.id
-    ORDER BY (
-        COALESCE(s.semantic, 0) * 0.55
-      + COALESCE(l.text_match, 0) * 0.20
-      + (m.importance / 100.0) * 0.13
-      + (m.confidence / 100.0) * 0.07
-      + freshness(m.updated_at) * 0.05
-    ) DESC
-    LIMIT 8
-  `).catch(async () => {
-    // freshness() helper may not exist yet — retry without it.
-    return dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
+  // ---- Retrieval : native (pgvector) ou Mem0 → hydratation → ranking Companion ----
+  const engine = engineOverride ?? memorySearchEngine()
+  const fclause = filterClauses.join('\n        AND ')
+  const nativeRows = () =>
+    dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
       WITH semantic AS (
         SELECT m.id, 1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector) AS semantic
         FROM memories m
-        WHERE ${filterClauses.join('\n          AND ')}
+        WHERE ${fclause}
           AND m.embedding IS NOT NULL
         ORDER BY m.embedding <=> '${toPgVectorLiteral(vector)}'::vector
         LIMIT 40
@@ -146,7 +115,45 @@ export async function askCompanion(
       ) DESC
       LIMIT 8
     `)
-  })
+
+  let rows: (ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number })[] = []
+
+  if (engine !== 'native') {
+    // Chemin Mem0 : retrieval sémantique → hydratation SQL → permission + ranking.
+    const memoryProvider = await getMemoryProvider(dbh, organizationId)
+    const hits = await memoryProvider.search({ query: question, organizationId, topK: 30 })
+    const hydrated: (ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number })[] = []
+    if (hits.length > 0) {
+      const idList = hits.map((h) => `'${h.companionMemoryId}'`).join(',')
+      const scoreById = new Map(hits.map((h) => [h.companionMemoryId, h.score]))
+      hydrated.push(
+        ...(await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
+          SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
+                 m.contributor, m.updated_at::text AS updated_at,
+                 COALESCE(m.confidence / 100.0, 0) AS semantic,
+                 CASE WHEN m.title || ' ' || m.content ILIKE ${likePattern(question)} THEN 1 ELSE 0 END AS text_match,
+                 (SELECT d.title FROM memory_sources ms JOIN documents d ON d.id = ms.document_id
+                  WHERE ms.memory_id = m.id AND d.title IS NOT NULL LIMIT 1) AS document_title,
+                 (SELECT ms.excerpt FROM memory_sources ms WHERE ms.memory_id = m.id LIMIT 1) AS excerpt
+          FROM memories m
+          WHERE m.id IN (${idList})
+            AND ${fclause}
+        `)),
+      )
+      // Re-applique le score sémantique du provider après hydratation.
+      for (const r of hydrated) r.semantic = scoreById.get(r.id) ?? Number(r.semantic)
+    }
+    rows = hydrated
+    // Hybrid : si Mem0 ne trouve pas assez, on complète avec le chemin natif.
+    if (engine === 'hybrid' && rows.length < 4) {
+      const nat = await nativeRows()
+      const seen = new Set(rows.map((r) => r.id))
+      rows = rows.concat(nat.filter((r) => !seen.has(r.id)))
+    }
+  } else {
+    rows = await nativeRows()
+  }
+  void embedProvider
 
   const scored = rows
     .map((r) => ({

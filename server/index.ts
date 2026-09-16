@@ -7,6 +7,8 @@ import { buildApiRouter } from './routes.js'
 import { seedDatabase } from './seed.js'
 import { config } from './config.js'
 import { ensureUploadsDir } from './services/ingestion.js'
+import { checkAiHealth } from './ai-settings.js'
+import { memorySearchEngine, reindexMemoriesFromDb } from './memory/index.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +20,11 @@ async function main() {
   await runMigrations(dbh)
   ensureUploadsDir()
   fs.mkdirSync('./data/tmp-uploads', { recursive: true })
+
+  // Production : PostgreSQL réel obligatoire. PGlite = dev/test uniquement.
+  if (process.env.NODE_ENV === 'production' && dbh.driver === 'pglite') {
+    console.warn('[companion] ⚠️  NODE_ENV=production avec PGlite — PostgreSQL + pgvector requis en production (DATABASE_URL).')
+  }
 
   const app = express()
   app.use(cors({ origin: config.frontendOrigin, credentials: true }))
@@ -35,6 +42,24 @@ async function main() {
     }
   }
 
+  // État IA : modèles épinglés, dégradation annoncée — jamais de swap silencieux.
+  const orgRows = await dbh.query<{ id: string }>(`SELECT id FROM organizations ORDER BY created_at LIMIT 1`)
+  const primaryOrgId = orgRows[0]?.id
+  if (primaryOrgId) {
+    const health = await checkAiHealth(dbh, primaryOrgId)
+    if (health.degraded) {
+      console.warn('[companion] ⚠️  IA dégradée :', health.issues.join(' | '))
+    } else {
+      console.log(`[companion] IA OK — chat: ${health.chatModel}, embeddings: ${health.embedModel}`)
+    }
+    // Ré-indexation Mem0 (store memory éphémère) en arrière-plan.
+    if (memorySearchEngine() !== 'native') {
+      void reindexMemoriesFromDb(dbh, primaryOrgId)
+        .then((n) => n > 0 && console.log(`[companion] Mem0 : ${n} mémoires ré-indexées`))
+        .catch((err) => console.warn('[companion] reindex Mem0 échoué:', String(err).slice(0, 200)))
+    }
+  }
+
   app.use('/api', buildApiRouter(dbh))
 
   // Serve the built frontend (self-hosted single binary mode).
@@ -47,7 +72,7 @@ async function main() {
   }
 
   app.listen(config.port, () => {
-    console.log(`[companion] API prête sur http://localhost:${config.port} (driver: ${dbh.driver})`)
+    console.log(`[companion] API prête sur http://localhost:${config.port} (driver: ${dbh.driver}, moteur mémoire: ${memorySearchEngine()})`)
   })
 }
 
