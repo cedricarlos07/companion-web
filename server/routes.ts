@@ -405,6 +405,72 @@ export function buildApiRouter(dbh: DbHandle): Router {
     res.json({ memory: updated })
   })
 
+  /* ----------------------- Auth completion -------------------------------- */
+
+  api.post('/auth/forgot-password', async (req, res) => {
+    const { email } = req.body as { email?: string }
+    if (!email) return res.status(400).json({ error: 'email requis' })
+    const { createPasswordReset } = await import('./services/auth-completion.js')
+    const token = await createPasswordReset(dbh, email)
+    // En production : envoyer par email. En dev : retourner le token pour test.
+    res.json({ ok: true, ...(process.env.NODE_ENV !== 'production' && token ? { devToken: token } : {}) })
+  })
+
+  api.post('/auth/reset-password', async (req, res) => {
+    const { token, newPassword } = req.body as { token?: string; newPassword?: string }
+    if (!token || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'token et mot de passe (8+ caractères) requis' })
+    }
+    const { resetPassword } = await import('./services/auth-completion.js')
+    const ok = await resetPassword(dbh, token, newPassword)
+    if (!ok) return res.status(400).json({ error: 'token invalide ou expiré' })
+    res.json({ ok: true })
+  })
+
+  api.get('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+    const rows = await dbh.query(
+      `SELECT i.id, i.email, i.role, i.status, i.expires_at::text AS expires_at, i.invited_by_name
+       FROM invitations i WHERE i.organization_id = '${req.user!.organizationId}' ORDER BY i.created_at DESC`,
+    )
+    res.json({ invitations: rows })
+  })
+
+  api.post('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+    const { email, role } = req.body as { email?: string; role?: string }
+    if (!email || !role) return res.status(400).json({ error: 'email et role requis' })
+    const { createInvitation } = await import('./services/auth-completion.js')
+    const result = await createInvitation(dbh, req.user!.organizationId, email, role, req.user!.id, req.user!.name)
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'invitation.created', targetType: 'invitation', targetId: result.invitationId,
+      detail: { email, role },
+    })
+    res.json({ invitationId: result.invitationId, ...(process.env.NODE_ENV !== 'production' ? { devToken: result.token } : {}) })
+  })
+
+  api.post('/invitations/accept', async (req, res) => {
+    const { token, password, firstName, lastName } = req.body as Record<string, string>
+    if (!token || !password || password.length < 8 || !firstName || !lastName) {
+      return res.status(400).json({ error: 'token, mot de passe (8+), prénom et nom requis' })
+    }
+    const { acceptInvitation } = await import('./services/auth-completion.js')
+    const ok = await acceptInvitation(dbh, token, password, firstName, lastName)
+    if (!ok) return res.status(400).json({ error: 'invitation invalide ou expirée' })
+    res.json({ ok: true })
+  })
+
+  /* --------------------------- Entitlements -------------------------------- */
+
+  api.get('/entitlements', authRequired(dbh), async (req, res) => {
+    const { getEntitlements } = await import('./services/entitlements.js')
+    res.json({ entitlements: await getEntitlements(dbh, req.user!.organizationId) })
+  })
+
+  api.get('/license', authRequired(dbh), async (req, res) => {
+    const { checkLicenseStatus } = await import('./services/licenses.js')
+    const license = await checkLicenseStatus(dbh, req.user!.organizationId)
+    res.json(license)
+  })
+
   /* -------------------------------- Ask ----------------------------------- */
 
   api.post('/ask', authRequired(dbh), async (req, res) => {
