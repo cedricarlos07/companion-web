@@ -1,25 +1,173 @@
 /* ---------------------------------------------------------------------------
- * Companion theme overrides — layered on top of BoardUI's styles/globals.css.
- * 1. Retints BoardUI's accent ramp (CTA gradient, ghost buttons, selection
- *    states, focus ring) from stock blue to Companion indigo #625BF6.
- * 2. Wires the Inter variable font (loaded via @fontsource-variable/inter)
- *    into the font stack BoardUI's typography expects (--font-inter).
- * Semantic tokens (background/border/text) reference these variables, so every
- * component re-tints automatically.
+ * Companion brand layer — brand kit v1.0, September 2026.
+ *
+ * "Knowledge lives on." Companion green #C4F68C on ink #0B0B0B, over white
+ * and gray surfaces. Strict split: green marks what is ALIVE in the org's
+ * memory — active agents, captured knowledge, improving coverage, validation,
+ * progress, and the main CTA. Everything else stays ink, white and gray.
+ *
+ * This file is imported inside globals.css' leading @import block, so its
+ * plain `:root` declarations land unlayered and win over BoardUI's
+ * @theme-emitted (layered) tokens without !important.
+ *
+ * Three jobs:
+ *   1. Official brand tokens (--companion-*) plus Tailwind utilities for the
+ *      brand ramp (`bg-companion-300`, `text-brand-black`, `bg-surface`, …).
+ *   2. Re-tints BoardUI's accent ramp from blue to the Companion green so
+ *      every interactive/selection surface (primary CTA, ghost buttons, focus
+ *      ring, checkbox, switch, tabs, date-range selection) inherits the brand
+ *      automatically — the same lever the previous indigo identity used.
+ *   3. Product ground: page #F3F4F6, secondary surface #F8F9FA (cards stay
+ *      white), and the primary CTA as flat brand green with an INK label.
+ *      Brand green fills are light, so the white foreground BoardUI assumes
+ *      on accent fills flips to black ink wherever green carries content.
  * -------------------------------------------------------------------------- */
 
+/* ----- 1. Official brand tokens (brand kit v1.0) --------------------------- */
 :root {
-  --font-inter: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  /* Brand */
+  --companion-green: #c4f68c;
+  --companion-black: #0b0b0b;
+  --companion-gray: #6b7280;
+  --companion-background: #f3f4f6;
+  --companion-white: #ffffff;
 
-  --color-accent-50:  #f1f0fe;
-  --color-accent-100: #e5e3fd;
-  --color-accent-200: #cdc9fb;
-  --color-accent-300: #b0aaf9;
-  --color-accent-400: #9289f8;
-  --color-accent-500: #625bf6;
-  --color-accent-600: #4c46e2;
-  --color-accent-700: #3f39c4;
-  --color-accent-800: #3430a0;
-  --color-accent-900: #2d2a7e;
-  --color-accent-950: #1c1a4d;
+  /* Extended UI */
+  --companion-green-hover: #b5ed75;
+  --companion-green-soft: #edffda;
+  --companion-green-border: #d8f9b5;
+
+  --companion-text-primary: #0b0b0b;
+  --companion-text-secondary: #6b7280;
+  --companion-text-muted: #9ca3af;
+
+  --companion-border: #e5e7eb;
+  --companion-border-soft: #f0f1f2;
+
+  --companion-surface: #ffffff;
+  --companion-surface-secondary: #f8f9fa;
+  --companion-sidebar: #0b0b0b;
+
+  /* Status */
+  --companion-success: #77c83d;
+  --companion-warning: #f59e0b;
+  --companion-danger: #ef4444;
+  --companion-info: #3b82f6;
+
+  /* Shadows */
+  --companion-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --companion-shadow-md: 0 8px 30px rgba(0, 0, 0, 0.06);
+  --companion-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.08);
+
+  /* Radius. Deliberately NOT --radius-sm/md/…: those names ARE Tailwind's
+   * radius scale, and redefining them in :root would silently resize every
+   * rounded-* utility across BoardUI. */
+  --companion-radius-sm: 8px;
+  --companion-radius-md: 12px;
+  --companion-radius-lg: 16px;
+  --companion-radius-xl: 22px;
+  --companion-radius-pill: 999px;
+}
+
+/* ----- 2. Brand ramp as Tailwind utilities ---------------------------------
+ * `bg-companion-300` is the signature green; text-grade greens start at 700.
+ * The generic surface names the brand kit ships are kept for page-level
+ * Companion styling; BoardUI semantic tokens remain the default choice. */
+@theme {
+  --color-companion-50: #f7ffef;
+  --color-companion-100: #edffda;
+  --color-companion-200: #ddfdbb;
+  --color-companion-300: #c4f68c;
+  --color-companion-400: #aeeb69;
+  --color-companion-500: #91d84b;
+  --color-companion-600: #70b52f;
+  --color-companion-700: #568c27;
+  --color-companion-800: #466f25;
+  --color-companion-900: #3b5d23;
+  --color-companion-950: #2c451a;
+
+  --color-brand-black: #0b0b0b;
+
+  --color-background: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+}
+
+/* ----- 3. Accent re-tint + product ground ---------------------------------- */
+:root {
+  /* Typography: Satoshi everywhere (brand kit), Inter Variable — already
+   * bundled via @fontsource-variable/inter — as the offline fallback. The
+   * legacy --font-inter name is what theme.css' --font-sans consumes. */
+  --font-inter:
+    "Satoshi Variable", "Satoshi", "Inter Variable", ui-sans-serif, system-ui,
+    sans-serif;
+
+  /* Companion green ramp (brand kit v1.0; 950 derived from 900). */
+  --color-accent-50:  #f7ffef;
+  --color-accent-100: #edffda;
+  --color-accent-200: #ddfdbb;
+  --color-accent-300: #c4f68c;
+  --color-accent-400: #aeeb69;
+  --color-accent-500: #91d84b;
+  --color-accent-600: #70b52f;
+  --color-accent-700: #568c27;
+  --color-accent-800: #466f25;
+  --color-accent-900: #3b5d23;
+  --color-accent-950: #2c451a;
+
+  /* Product ground: #F3F4F6 app background, #F8F9FA secondary surface,
+   * white cards. Dark mode keeps BoardUI's neutral ramp (these are :root
+   * only; the .dark block in theme.css wins on specificity). */
+  --color-background-full:              var(--companion-background);
+  --color-background-secondary-default: var(--companion-surface-secondary);
+  --color-background-secondary-hover:   #eff1f3;
+
+  /* Light-green fills can't carry light text: ghost buttons and badges keep
+   * BoardUI's pairing structure but step to the text-grade green (800) so
+   * labels stay legible on #EDFFDA. */
+  --color-button-ghost-foreground: var(--color-accent-800);
+  --color-badge-new-text:          var(--color-accent-800);
+
+  /* Primary CTA — the visual signature: flat Companion green, ink label.
+   * Flat same-stop "gradients" keep BoardUI's gradient-swap button mechanic
+   * (hover layer on ::before) working untouched. Disabled stays BoardUI's
+   * neutral ramp. */
+  --gradient-button-primary-default: linear-gradient(180deg, #c4f68c 0%, #c4f68c 100%);
+  --gradient-button-primary-hover:   linear-gradient(180deg, #b5ed75 0%, #b5ed75 100%);
+  --gradient-button-primary-active:  linear-gradient(180deg, #aeeb69 0%, #aeeb69 100%);
+  --color-button-primary-foreground: var(--companion-black);
+}
+
+@theme inline {
+  --color-button-primary-foreground: var(--color-button-primary-foreground);
+}
+
+/* ----- 4. Official brand recipes -------------------------------------------
+ * Sparse-use surfaces: hero/onboarding gradient, the near-invisible AI tint
+ * for dashboard blocks, and the highlight card (memory health, milestones). */
+.companion-gradient {
+  background: radial-gradient(
+    circle at 30% 20%,
+    #dffff0 0%,
+    #c4f68c 40%,
+    #aeeb69 100%
+  );
+}
+
+.companion-ai-surface {
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(196, 246, 140, 0.25),
+      transparent 45%
+    ),
+    #ffffff;
+}
+
+.card-highlight {
+  background: linear-gradient(135deg, #f8fff1 0%, #edffda 100%);
+  border: 1px solid var(--companion-green-border);
+  border-radius: var(--companion-radius-lg);
+  padding: 24px;
 }

@@ -31,7 +31,7 @@ const QUESTIONS = [
   },
 ]
 
-const ENGINES = ['native', 'mem0', 'hybrid']
+const ENGINES = ['native', 'mem0', 'hybrid', 'fusion']
 
 async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(`${BASE}/api${path}`, {

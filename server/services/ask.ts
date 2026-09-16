@@ -69,7 +69,7 @@ export async function askCompanion(
   question: string,
   filters: AskFilters = {},
   actor?: MemoryActor,
-  engineOverride?: 'native' | 'mem0' | 'hybrid',
+  engineOverride?: 'native' | 'mem0' | 'hybrid' | 'fusion',
 ): Promise<AskResult> {
   const { vector, provider: embedProvider } = await embed(question)
   const accessClause = memoryAccessClause(actor ?? { kind: 'user', organizationId, appRole: 'owner' }, organizationId)
@@ -118,16 +118,10 @@ export async function askCompanion(
 
   let rows: (ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number })[] = []
 
-  if (engine !== 'native') {
-    // Chemin Mem0 : retrieval sémantique → hydratation SQL → permission + ranking.
-    const memoryProvider = await getMemoryProvider(dbh, organizationId)
-    const hits = await memoryProvider.search({ query: question, organizationId, topK: 30 })
-    const hydrated: (ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number })[] = []
-    if (hits.length > 0) {
-      const idList = hits.map((h) => `'${h.companionMemoryId}'`).join(',')
-      const scoreById = new Map(hits.map((h) => [h.companionMemoryId, h.score]))
-      hydrated.push(
-        ...(await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
+  const hydrateByIds = async (ids: string[]) =>
+    ids.length === 0
+      ? []
+      : await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
           SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
                  m.contributor, m.updated_at::text AS updated_at,
                  COALESCE(m.confidence / 100.0, 0) AS semantic,
@@ -136,20 +130,36 @@ export async function askCompanion(
                   WHERE ms.memory_id = m.id AND d.title IS NOT NULL LIMIT 1) AS document_title,
                  (SELECT ms.excerpt FROM memory_sources ms WHERE ms.memory_id = m.id LIMIT 1) AS excerpt
           FROM memories m
-          WHERE m.id IN (${idList})
+          WHERE m.id IN (${ids.map((i) => `'${i}'`).join(',')})
             AND ${fclause}
-        `)),
-      )
-      // Re-applique le score sémantique du provider après hydratation.
-      for (const r of hydrated) r.semantic = scoreById.get(r.id) ?? Number(r.semantic)
+        `)
+
+  if (engine === 'mem0') {
+    // Chemin Mem0 seul : retrieval sémantique → hydratation SQL → permission + ranking.
+    const memoryProvider = await getMemoryProvider(dbh, organizationId)
+    const hits = await memoryProvider.search({ query: question, organizationId, topK: 30 })
+    const scoreById = new Map(hits.map((h) => [h.companionMemoryId, h.score]))
+    rows = await hydrateByIds(hits.map((h) => h.companionMemoryId))
+    for (const r of rows) r.semantic = scoreById.get(r.id) ?? Number(r.semantic)
+  } else if (engine === 'fusion') {
+    // FUSION : native top 10 + mem0 top 10 → merge par companionMemoryId (score max)
+    // → dédup → reranking Companion (déjà appliqué par les clauses de tri + scored) → top 8.
+    const memoryProvider = await getMemoryProvider(dbh, organizationId)
+    const [nativeHits, mem0Hits] = await Promise.all([
+      nativeRows(),
+      memoryProvider.search({ query: question, organizationId, topK: 10 }).then(async (hits) => {
+        const scoreById = new Map(hits.map((h) => [h.companionMemoryId, h.score]))
+        const hydrated = await hydrateByIds(hits.map((h) => h.companionMemoryId))
+        for (const r of hydrated) r.semantic = scoreById.get(r.id) ?? Number(r.semantic)
+        return hydrated
+      }),
+    ])
+    const merged = new Map<string, ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>()
+    for (const r of [...nativeHits, ...mem0Hits]) {
+      const existing = merged.get(r.id)
+      if (!existing || r.semantic > existing.semantic) merged.set(r.id, r)
     }
-    rows = hydrated
-    // Hybrid : si Mem0 ne trouve pas assez, on complète avec le chemin natif.
-    if (engine === 'hybrid' && rows.length < 4) {
-      const nat = await nativeRows()
-      const seen = new Set(rows.map((r) => r.id))
-      rows = rows.concat(nat.filter((r) => !seen.has(r.id)))
-    }
+    rows = [...merged.values()]
   } else {
     rows = await nativeRows()
   }

@@ -39,8 +39,8 @@ export function LoginPage() {
       <div className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center text-center">
-            <span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-button-primary text-text-white shadow-sm">
-              <HugeIcon icon={AiBrain01Icon} size="md" className="text-white" />
+            <span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-companion-300 shadow-sm">
+              <HugeIcon icon={AiBrain01Icon} size="md" className="text-brand-black" />
             </span>
             <h1 className="text-title-1-medium text-text-primary">Bienvenue dans Companion</h1>
             <p className="mt-1.5 text-body-medium text-text-secondary">

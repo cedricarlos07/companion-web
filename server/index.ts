@@ -10,6 +10,8 @@ import { ensureUploadsDir } from './services/ingestion.js'
 import { checkAiHealth } from './ai-settings.js'
 import { memorySearchEngine, reindexMemoriesFromDb } from './memory/index.js'
 import { buildAgentRouter, ensureAgentsSeeded } from './mastra/routes-agents.js'
+import { mountMcpHttp } from './mcp/http.js'
+import { buildMcpManagementRouter } from './mcp/routes-mcp.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -66,6 +68,8 @@ async function main() {
 
   app.use('/api', buildApiRouter(dbh))
   app.use('/api', buildAgentRouter(dbh))
+  app.use('/api/mcp', buildMcpManagementRouter(dbh))
+  mountMcpHttp(app, dbh)
 
   // Serve the built frontend (self-hosted single binary mode).
   const distDir = path.join(__dirname, '..', 'dist')

@@ -323,8 +323,8 @@ export function SetupPage() {
 
           {step === 4 && (
             <section className="py-6 text-center">
-              <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-button-primary text-text-white shadow-sm">
-                <HugeIcon icon={AiBrain01Icon} size="lg" className="text-white" />
+              <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-companion-300 shadow-sm">
+                <HugeIcon icon={AiBrain01Icon} size="lg" className="text-brand-black" />
               </span>
               <h1 className="text-title-1-medium text-text-primary">
                 Votre mémoire d'entreprise est prête.

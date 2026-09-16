@@ -92,7 +92,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         />
         {unread > 0 && (
           <span
-            className="pointer-events-none absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-accent-500 text-[10px] leading-4 font-semibold text-white tabular-nums"
+            className="pointer-events-none absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-companion-300 text-[10px] leading-4 font-semibold text-brand-black tabular-nums"
             aria-hidden
           >
             {unread}

@@ -87,19 +87,19 @@ export function AppSidebar() {
   return (
     <aside
       className={cx(
-        'flex h-full shrink-0 flex-col border-r border-separator-border bg-background-secondary-default transition-[width] duration-200',
-        collapsed ? 'w-16' : 'w-64',
+        'flex h-full shrink-0 flex-col rounded-r-[20px] border-r border-white/10 bg-brand-black transition-[width] duration-200',
+        collapsed ? 'w-16' : 'w-[248px]',
       )}
     >
       {/* Brand */}
       <div className={cx('flex items-center gap-2.5 px-4 pt-4 pb-3', collapsed && 'justify-center px-2')}>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-button-primary text-text-white shadow-xs">
-          <HugeIcon icon={AiBrain01Icon} size="sm" className="text-white" />
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-companion-300">
+          <HugeIcon icon={AiBrain01Icon} size="sm" className="text-brand-black" />
         </span>
         {!collapsed && (
           <span className="min-w-0">
-            <span className="block truncate text-headline-semibold text-text-primary">Companion</span>
-            <span className="block truncate text-caption-1-medium text-text-tertiary">
+            <span className="block truncate text-headline-semibold text-white">Companion</span>
+            <span className="block truncate text-caption-1-medium text-white/50">
               Votre entreprise n'oublie plus.
             </span>
           </span>
@@ -111,16 +111,16 @@ export function AppSidebar() {
         <div className="px-3 pb-2">
           <Dropdown>
             <DropdownTrigger
-              className="flex w-full items-center gap-2.5 rounded-xl border border-border-button-default bg-background-primary-default px-2.5 py-2 text-left hover:bg-background-primary-hover"
+              className="flex w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.06] px-2.5 py-2 text-left hover:bg-white/10"
             >
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-100 text-caption-1-semibold text-accent-700">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-companion-300 text-caption-1-semibold text-brand-black">
                 K
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-body-2-medium text-text-primary">{ORG.workspace}</span>
-                <span className="block text-caption-1-medium text-text-tertiary">{ORG.employees} employés</span>
+                <span className="block truncate text-body-2-medium text-white">{ORG.workspace}</span>
+                <span className="block text-caption-1-medium text-white/50">{ORG.employees} employés</span>
               </span>
-              <HugeIcon icon={MenuIcon} size="xs" className="shrink-0 text-foreground-icon-tertiary rotate-90" />
+              <HugeIcon icon={MenuIcon} size="xs" className="shrink-0 text-white/40 rotate-90" />
             </DropdownTrigger>
             <DropdownPopover aria-label="Menu de l'espace de travail">
               <DropdownGroup label="Espaces de travail">
@@ -144,7 +144,7 @@ export function AppSidebar() {
         </div>
       ) : (
         <div className="flex justify-center pb-2">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-accent-100 text-caption-1-semibold text-accent-700">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-companion-300 text-caption-1-semibold text-brand-black">
             K
           </span>
         </div>
@@ -155,7 +155,7 @@ export function AppSidebar() {
         <button
           type="button"
           onClick={() => navigate('/home?search=open')}
-          className="flex w-full items-center gap-2 rounded-lg border border-border-button-default bg-background-primary-default px-2.5 py-1.5 text-text-tertiary hover:bg-background-primary-hover"
+          className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-1.5 text-white/50 hover:bg-white/10 hover:text-white/80"
           aria-label="Rechercher dans Companion"
         >
           <HugeIcon icon={Search01Icon} size="sm" className="shrink-0" />
@@ -175,7 +175,7 @@ export function AppSidebar() {
         {SECTIONS.map((section) => (
           <div key={section.title} className="mb-3">
             {!collapsed && (
-              <p className="px-2 pb-1 text-caption-1-semibold tracking-wide text-text-tertiary uppercase">
+              <p className="px-2 pb-1 text-caption-1-semibold tracking-wide text-white/40 uppercase">
                 {section.title}
               </p>
             )}
@@ -191,8 +191,8 @@ export function AppSidebar() {
                         'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-body-2-medium outline-none transition-colors',
                         'focus-visible:ring-2 focus-visible:ring-border-focus-ring',
                         isActive
-                          ? 'bg-background-primary-default text-text-primary shadow-card'
-                          : 'text-text-secondary hover:bg-background-primary-default hover:text-text-primary',
+                          ? 'bg-companion-300 text-brand-black'
+                          : 'text-white/65 hover:bg-white/[0.06] hover:text-white',
                         collapsed && 'justify-center px-2',
                       )
                     }
@@ -200,7 +200,7 @@ export function AppSidebar() {
                     <HugeIcon icon={item.icon} size="md" className="shrink-0" />
                     {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
                     {!collapsed && item.to === '/approvals' && pendingCount > 0 && (
-                      <span className="rounded-full bg-accent-500 px-1.5 text-caption-2-semibold text-text-white tabular-nums">
+                      <span className="rounded-full bg-companion-300 px-1.5 text-caption-2-semibold text-brand-black tabular-nums">
                         {pendingCount}
                       </span>
                     )}
@@ -213,7 +213,7 @@ export function AppSidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="border-t border-separator-border px-3 py-2">
+      <div className="border-t border-white/10 px-3 py-2">
         <ul className="space-y-0.5">
           {[
             { to: '/integrations', label: 'Intégrations', icon: PlugIcon },
@@ -227,8 +227,8 @@ export function AppSidebar() {
                   cx(
                     'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-body-2-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-border-focus-ring',
                     isActive
-                      ? 'bg-background-primary-default text-text-primary shadow-card'
-                      : 'text-text-secondary hover:bg-background-primary-default hover:text-text-primary',
+                      ? 'bg-companion-300 text-brand-black'
+                      : 'text-white/65 hover:bg-white/[0.06] hover:text-white',
                     collapsed && 'justify-center px-2',
                   )
                 }
@@ -245,15 +245,15 @@ export function AppSidebar() {
           <Dropdown>
             <DropdownTrigger
               className={cx(
-                'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-background-primary-default',
+                'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-white/[0.06]',
                 collapsed && 'w-auto px-1',
               )}
             >
               <PersonAvatar name={ORG.currentUser} size="md" />
               {!collapsed && (
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-body-2-medium text-text-primary">{ORG.currentUser}</span>
-                  <span className="block truncate text-caption-1-medium text-text-tertiary">
+                  <span className="block truncate text-body-2-medium text-white">{ORG.currentUser}</span>
+                  <span className="block truncate text-caption-1-medium text-white/50">
                     {ORG.currentUserRole}
                   </span>
                 </span>
@@ -284,7 +284,7 @@ export function AppSidebar() {
           onClick={() => setCollapsed((c) => !c)}
           aria-label={collapsed ? 'Déplier la barre latérale' : 'Replier la barre latérale'}
           className={cx(
-            'mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-body-2-medium text-text-tertiary hover:bg-background-primary-default hover:text-text-primary',
+            'mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-body-2-medium text-white/50 hover:bg-white/[0.06] hover:text-white',
             collapsed && 'justify-center px-2',
           )}
         >

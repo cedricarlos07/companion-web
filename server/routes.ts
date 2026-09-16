@@ -428,7 +428,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
       appRole: req.user!.appRole,
       employeeId: req.user!.employeeId,
       departmentId: departmentIdResolved,
-    }, engine === 'native' || engine === 'mem0' || engine === 'hybrid' ? engine : undefined)
+    }, engine === 'native' || engine === 'mem0' || engine === 'hybrid' || engine === 'fusion' ? engine : undefined)
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'ask.question', targetType: 'ask', detail: { question: question.slice(0, 200), abstained: result.abstained },
     })

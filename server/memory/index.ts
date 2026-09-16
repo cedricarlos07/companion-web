@@ -5,7 +5,7 @@ import { CompanionNativeMemoryProvider } from './companion-native.js'
 import { Mem0MemoryProvider } from './mem0-provider.js'
 import type { MemoryProvider } from './memory-provider.js'
 
-export type MemorySearchEngine = 'native' | 'mem0' | 'hybrid'
+export type MemorySearchEngine = 'native' | 'mem0' | 'hybrid' | 'fusion'
 
 /**
  * Sélection du moteur mémoire :
@@ -14,8 +14,13 @@ export type MemorySearchEngine = 'native' | 'mem0' | 'hybrid'
  *   MEM0_PG_DSN          = DSN PostgreSQL (prod, vector store pgvector)
  */
 export function memorySearchEngine(): MemorySearchEngine {
-  const v = (process.env.MEMORY_SEARCH_ENGINE ?? 'hybrid').toLowerCase()
-  return v === 'native' || v === 'mem0' ? v : 'hybrid'
+  // Défaut : fusion = Mem0 principal (search → IDs → Postgres → permissions →
+  // reranking) complété par le chemin natif (fallback technique).
+  // MEMORY_PROVIDER=mem0 est le défaut produit ; native = fallback/comparaison.
+  const provider = (process.env.MEMORY_PROVIDER ?? 'mem0').toLowerCase()
+  if (provider === 'native') return 'native'
+  const v = (process.env.MEMORY_SEARCH_ENGINE ?? 'fusion').toLowerCase()
+  return v === 'native' || v === 'mem0' || v === 'hybrid' ? v : 'fusion'
 }
 
 let provider: MemoryProvider | null = null

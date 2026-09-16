@@ -85,7 +85,7 @@ export function FileDropZone({
         {progress === null ? (
           <>
             <p className="text-body-medium text-text-primary">
-              Glissez-déposez un fichier ou <span className="text-accent-500">parcourez</span>
+              Glissez-déposez un fichier ou <span className="text-accent-700">parcourez</span>
             </p>
             <p className="text-caption-1-medium text-text-tertiary">
               {hint ?? `Formats acceptés : ${allowedExtensions.join(' ')}`}
