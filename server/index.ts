@@ -17,6 +17,7 @@ import { buildActivepiecesRouter } from './activepieces/routes-ap.js'
 import { buildIntegrationsRouter } from './integrations/catalog.js'
 import { buildSetupRouter } from './setup.js'
 import { isActivepiecesEnabled, initializeExternalTools } from './activepieces/provider.js'
+import { bootstrapActivepieces } from './activepieces/bootstrap.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -52,11 +53,25 @@ async function main() {
   }
 
   // Agents V1 (allowlists explicites, deny par défaut).
-  await ensureAgentsSeeded(dbh)
-
-  // État IA : modèles épinglés, dégradation annoncée — jamais de swap silencieux.
   const orgRows = await dbh.query<{ id: string }>(`SELECT id FROM organizations ORDER BY created_at LIMIT 1`)
   const primaryOrgId = orgRows[0]?.id
+
+  await ensureAgentsSeeded(dbh)
+
+  // Activepieces auto-provisioning : crée les flows Companion dans Activepieces.
+  if (isActivepiecesEnabled()) {
+    const apUrl = process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'
+    const apToken = process.env.ACTIVEPIECES_MCP_TOKEN
+    const apProjectId = process.env.ACTIVEPIECES_PROJECT_ID
+    if (apToken && apProjectId) {
+      const { bootstrapActivepieces } = await import('./activepieces/bootstrap.js')
+      void bootstrapActivepieces(dbh, primaryOrgId, apUrl, apToken, apProjectId)
+        .then((r) => console.log(`[companion] Activepieces : ${r.created} flow(s) créés, ${r.existing} existants`))
+        .catch((err) => console.warn('[companion] Activepieces bootstrap échoué:', String(err).slice(0, 150)))
+    }
+  }
+
+  // État IA : modèles épinglés, dégradation annoncée — jamais de swap silencieux.
   if (primaryOrgId) {
     const health = await checkAiHealth(dbh, primaryOrgId)
     if (health.degraded) {
