@@ -116,17 +116,26 @@ export function buildPortal(dbh: DbHandle): Router {
     const hasError = Boolean((req.query as Record<string, unknown>).error)
     res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KamaLoka — Portail client</title><style>
-body{font:14px/1.5 system-ui,sans-serif;background:#f6f7f9;display:grid;place-items:center;min-height:100vh;margin:0}
-.box{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:32px;width:min(380px,90vw)}
-h1{font-size:18px;margin:0 0 4px}p{color:#667085;margin:0 0 20px;font-size:13px}
-label{display:block;font-size:12px;color:#475467;margin-bottom:10px}input{width:100%;box-sizing:border-box;border:1px solid #d0d5dd;border-radius:8px;padding:9px;font:inherit;margin-top:4px}
-button{width:100%;background:#1849a9;color:#fff;border:0;border-radius:8px;padding:10px;font:inherit;cursor:pointer}
-.err{color:#b42318;font-size:13px;margin-bottom:10px}</style></head><body>
-<div class="box"><h1>Portail client KamaLoka</h1><p>Companion — licences, téléchargements et factures.</p>
+body{font:14px/1.5 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:#f6f7f9;display:grid;place-items:center;min-height:100vh;margin:0;color:#344054}
+.box{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:34px;width:min(400px,90vw);box-shadow:0 12px 34px rgba(16,24,40,.08)}
+.brand{display:flex;align-items:center;gap:11px;margin-bottom:20px}
+.mark{width:40px;height:40px;border-radius:12px;background:#c4f68c;display:grid;place-items:center;flex:none}
+h1{font-size:18px;margin:0;color:#101828}p{color:#667085;margin:0 0 20px;font-size:13px}
+label{display:block;font-size:12px;color:#475467;margin-bottom:12px}input{width:100%;box-sizing:border-box;border:1px solid #d0d5dd;border-radius:9px;padding:10px;font:inherit;margin-top:4px}
+input:focus{outline:2px solid #1849a9;outline-offset:1px;border-color:#1849a9}
+button{width:100%;background:#1849a9;color:#fff;border:0;border-radius:10px;padding:11px;font:inherit;font-weight:600;cursor:pointer}
+button:hover{background:#0f2f6b}
+.err{color:#b42318;font-size:13px;margin-bottom:10px}
+.foot{margin-top:18px;font-size:12px;color:#98a2b3;text-align:center}
+</style></head><body>
+<div class="box"><div class="brand"><span class="mark">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#101828" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a4 4 0 0 0-4 4v1a3.5 3.5 0 0 0-1 6.8V16a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-1.2A3.5 3.5 0 0 0 16 8V7a4 4 0 0 0-4-4Z"/><path d="M12 3v18M9 11h6"/></svg>
+</span><div><h1 style="margin:0">Portail client KamaLoka</h1><p style="margin:2px 0 0">Companion — licences, téléchargements, factures</p></div></div>
 ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}
 <form method="post" action="/portal/login"><label>Email<input name="email" type="email" required autofocus>
 </label><label>Mot de passe<input name="password" type="password" required></label>
-<button type="submit">Se connecter</button></form></div></body></html>`)
+<button type="submit">Se connecter</button></form>
+<p class="foot">KamaLoka AI Technologies · support@kamaloka.ai</p></div></body></html>`)
   })
 
   router.post('/portal/login', async (req: Request, res: Response) => {
@@ -255,31 +264,50 @@ ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}
       )
     )[0]
     const portalStyle = `<style>
-body{font:14px/1.5 system-ui,sans-serif;background:#f6f7f9;margin:0;color:#1a1d21}
-header{background:#101828;color:#fff;padding:12px 24px;display:flex;gap:16px;align-items:center}
-header .brand{font-weight:700}header a{color:#cbd5e1;text-decoration:none;margin-right:12px}header a:hover{color:#fff}
-main{max-width:960px;margin:24px auto;padding:0 16px}
-h1{font-size:20px}h2{font-size:15px;margin:26px 0 8px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px}
-.card{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:16px}
-.card b{display:block;font-size:18px;margin-bottom:2px}.card span{color:#667085;font-size:12px}
-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e7ec;border-radius:10px;overflow:hidden}
-th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #eef0f3;font-size:13px}th{background:#f9fafb;color:#475467}
-.badge{border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+body{font:14px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:#f6f7f9;margin:0;color:#1a1d21}
+header{background:#101828;color:#fff;padding:10px 24px;display:flex;gap:18px;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px}
+.mark{width:32px;height:32px;border-radius:10px;background:#c4f68c;display:grid;place-items:center;flex:none}
+header .brand span.lbl{font-size:14px}
+header a{color:#cbd5e1;text-decoration:none;margin-right:14px;font-size:13.5px}
+header a:hover{color:#fff}
+main{max-width:1000px;margin:26px auto;padding:0 16px}
+h1{font-size:21px;color:#101828;margin:0 0 4px}
+h2{font-size:15px;color:#101828;margin:26px 0 10px}
+.sub{color:#667085;font-size:13px;margin:0 0 18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:6px}
+.card{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:16px}
+.card b{display:block;font-size:19px;color:#101828;margin-bottom:2px}.card span{color:#667085;font-size:12px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid #eef0f3;font-size:13px}th{background:#f9fafb;color:#475467;font-weight:600}
+tr:last-child td{border-bottom:0}
+.badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
 .ok{background:#dcfae6;color:#067647}.warn{background:#fef0c7;color:#b54708}.bad{background:#fee4e2;color:#b42318}.mute{background:#eef2f6;color:#475467}
-button{background:#1849a9;color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
-button.ghost{background:#eef2f6;color:#1a1d21}
-code{background:#eef2f6;border-radius:6px;padding:2px 6px;font-size:12px}
-.msg{background:#eff6ff;border:1px solid #bfd8ff;color:#1849a9;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px}
+button{background:#1849a9;color:#fff;border:0;border-radius:9px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+button:hover{background:#0f2f6b}
+button.ghost{background:#eef2f6;color:#1a1d21}button.ghost:hover{background:#e4e9f0}
+code{background:#eef2f6;border-radius:6px;padding:2px 6px;font-size:12px;color:#101828}
+.msg{background:#eff6ff;border:1px solid #bfd8ff;color:#1849a9;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-size:13px}
+.msg.amber{background:#fffaeb;border-color:#fedf89;color:#b54708}
 ul.assets{list-style:none;padding:0;display:grid;gap:8px}
-ul.assets li{background:#fff;border:1px solid #e4e7ec;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+ul.assets li{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:11px 15px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+ul.assets li>span{font-size:13px;color:#344054;display:flex;align-items:center;gap:9px}
+ul.assets li svg{flex:none;color:#667085}
+a.btn{display:inline-block;background:#1849a9;color:#fff;border-radius:9px;padding:9px 15px;font-weight:600;font-size:13.5px;text-decoration:none}
+a.btn:hover{background:#0f2f6b}
+.muted{color:#667085}.fine{font-size:12.5px;color:#667085}
 </style>`
-    const body = `<header><span class="brand">KAMALOKA · Portail client</span>
-<nav><a href="/docs" target="_blank">Documentation</a><a href="mailto:support@kamaloka.ai">Support</a></nav>
-<form method="post" action="/portal/logout" style="margin-left:auto"><button class="ghost" type="submit">Déconnexion</button></form></header>
+    const downloadSvg = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M4 19h16"/></svg>'
+    const headerHtml = `<header><span class="brand"><span class="mark">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101828" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a4 4 0 0 0-4 4v1a3.5 3.5 0 0 0-1 6.8V16a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-1.2A3.5 3.5 0 0 0 16 8V7a4 4 0 0 0-4-4Z"/><path d="M12 3v18M9 11h6"/></svg>
+</span><span class="lbl">KAMALOKA · Portail client</span></span>
+<nav><a href="/docs">Documentation</a><a href="mailto:support@kamaloka.ai">Support</a></nav>
+<form method="post" action="/portal/logout" style="margin-left:auto"><button class="ghost" type="submit">Déconnexion</button></form></header>`
+    const body = `${headerHtml}
 <main>
 <h1>Bonjour ${customer?.name ?? '—'}</h1>
-${lic && lic.expires_at && new Date(lic.expires_at) < new Date() ? '<div class="msg">Votre licence a expiré — consultez la rubrique Renouvellement ou contactez votre interlocuteur Kamaloka.</div>' : ''}
+<p class="sub">Votre espace Companion : licence, téléchargements et facturation.</p>
+${lic && lic.expires_at && new Date(lic.expires_at) < new Date() ? '<div class="msg amber">Votre licence a expiré — consultez la rubrique Renouvellement ou contactez votre interlocuteur Kamaloka. La consultation et les exports restent disponibles dans votre instance.</div>' : ''}
 ${latest && installed?.version && latest.version !== installed.version ? `<div class="msg">Une mise à jour est disponible : Companion ${installed.version} → <b>${latest.version}</b>. Aucune mise à jour n'est appliquée automatiquement.</div>` : ''}
 
 <h2>Votre licence</h2>
@@ -292,16 +320,16 @@ ${latest && installed?.version && latest.version !== installed.version ? `<div c
 
 <h2>Téléchargements</h2>
 <ul class="assets" id="assets">
-  <li><span><code>install.sh</code> — installation automatisée (Ubuntu 24.04, Docker)</span><button data-file="install.sh">Télécharger</button></li>
-  <li><span><code>docker-compose.prod.yml</code> — stack complète (PostgreSQL, Redis, Activepieces)</span><button data-file="docker-compose.prod.yml">Télécharger</button></li>
-  <li><span><code>.env.example</code> — configuration</span><button data-file=".env.example">Télécharger</button></li>
-  <li><span><code>checksums.sha256</code> — vérification d'intégrité</span><button data-file="checksums.sha256">Télécharger</button></li>
+  <li><span>${downloadSvg}<span><code>install.sh</code> — installation automatisée (Ubuntu 24.04, Docker)</span></span><button data-file="install.sh">Télécharger</button></li>
+  <li><span>${downloadSvg}<span><code>docker-compose.prod.yml</code> — stack complète (PostgreSQL, Redis, Activepieces)</span></span><button data-file="docker-compose.prod.yml">Télécharger</button></li>
+  <li><span>${downloadSvg}<span><code>.env.example</code> — configuration</span></span><button data-file=".env.example">Télécharger</button></li>
+  <li><span>${downloadSvg}<span><code>checksums.sha256</code> — vérification d'intégrité</span></span><button data-file="checksums.sha256">Télécharger</button></li>
 </ul>
-<p style="font-size:12px;color:#667085">Chaque téléchargement génère un lien temporaire valable 10 minutes, lié à votre session.</p>
+<p class="fine">Chaque téléchargement génère un lien temporaire valable 10 minutes, lié à votre session.</p>
 
 <h2>Fichier licence</h2>
-<p><a href="/portal/api/license.lic"><button type="button">Télécharger companion-license.lic</button></a></p>
-${lic ? `<p style="font-size:13px;color:#475467">${lic.license_id} · ${Object.entries(lic.entitlements).filter(([k]) => k.endsWith('.max')).map(([k, v]) => `${String(v)} ${k.replace('.max', '')}`).join(' · ')}</p>` : ''}
+<p><a class="btn" href="/portal/api/license.lic">Télécharger companion-license.lic</a></p>
+${lic ? `<p class="fine">${lic.license_id} · ${Object.entries(lic.entitlements).filter(([k]) => k.endsWith('.max')).map(([k, v]) => `${String(v)} ${k.replace('.max', '')}`).join(' · ')}</p>` : ''}
 
 <h2>Factures</h2>
 <table><tr><th>Facture</th><th>Libellé</th><th>Montant</th><th>Statut</th></tr>

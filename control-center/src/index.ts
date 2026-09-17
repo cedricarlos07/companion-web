@@ -47,12 +47,14 @@ async function main() {
   app.use('/admin', buildAdminApi(dbh))
   // Portail client (session cookie).
   app.use(buildPortal(dbh))
-  // Documentation statique (docs.companion.kamaloka.ai) et landing
-  // (companion.kamaloka.ai) — montées AVANT l'UI admin interne.
-  const docsDir = path.resolve('../website/docs')
-  if (fs.existsSync(docsDir)) app.use('/docs', express.static(docsDir))
-  const landingDir = path.resolve('../website/landing')
-  if (fs.existsSync(landingDir)) app.use('/landing', express.static(landingDir))
+  // Landing + docs (build React design-system : npm run build:marketing → website/dist)
+  // montés AVANT l'UI admin interne. En production : sous-domaines dédiés (nginx).
+  const mkt = path.resolve('../website/dist')
+  if (fs.existsSync(mkt)) {
+    app.get('/landing', (_req, res) => res.sendFile(path.join(mkt, 'landing.html')))
+    app.get('/docs', (_req, res) => res.sendFile(path.join(mkt, 'docs.html')))
+    app.use('/assets', express.static(path.join(mkt, 'assets')))
+  }
   // UI interne (cookie cc_admin) en dernier.
   app.use(buildUi(dbh))
 

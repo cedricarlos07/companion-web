@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:marketing": "vite build --config vite.marketing.config.ts",
     "preview": "vite preview",
     "dev:server": "tsx server/index.ts",
     "dev:server:watch": "tsx watch server/index.ts",
