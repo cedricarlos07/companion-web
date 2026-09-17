@@ -98,7 +98,7 @@ export function DemoPage() {
   const [form, setForm] = useState({
     fullName: '', email: '', phone: '', company: '', company_website: '',
     role: '', companySize: '', problem: '', tools: '', deployment: '', message: '',
-    offer: new URLSearchParams(location.search).get('offre') === 'pilote' ? 'pilote' : 'demo',
+    offer: new URLSearchParams(location.search).get('objet') ?? new URLSearchParams(location.search).get('offre') ?? 'demo',
   })
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -128,7 +128,19 @@ export function DemoPage() {
     }
   }
 
-  const titre = form.offer === 'pilote' ? 'Lancez votre pilote Companion de 30 jours.' : 'Voyez ce que votre entreprise risque de perdre.'
+  const TITRES: Record<string, string> = {
+    pilote: 'Lancez votre pilote Companion de 30 jours.',
+    risk: 'Évaluez le Knowledge Risk de votre organisation.',
+    business: 'Déployez Companion dans toute votre entreprise.',
+    enterprise: 'Construisons votre déploiement Enterprise.',
+  }
+  const titre = TITRES[form.offer] ?? 'Voyez ce que votre entreprise risque de perdre.'
+  const chipLabel: Record<string, string> = {
+    pilote: 'Pilote 30 jours', risk: 'Évaluation de risque', business: 'Business',
+    enterprise: 'Enterprise',
+  }
+  const chipText = chipLabel[form.offer] ?? 'Démo personnalisée · 30 min'
+  const ctaLabel = form.offer === 'pilote' ? 'Lancer mon pilote Companion' : 'Demander ma démo Companion'
 
   return (
     <div className="min-h-screen bg-background-full font-sans text-text-primary">
@@ -176,7 +188,7 @@ export function DemoPage() {
         ) : (
           <>
             <div className="mx-auto max-w-3xl text-center">
-              <Chip variant="subtle" color="lime">{form.offer === 'pilote' ? 'Pilote 30 jours' : 'Démo personnalisée · 30 min'}</Chip>
+              <Chip variant="subtle" color="lime">{chipText}</Chip>
               <h1 className="mt-5 font-medium tracking-tight text-text-primary" style={{ fontSize: 'clamp(30px,4vw,42px)', lineHeight: 1.12 }}>
                 {titre}
               </h1>
@@ -215,7 +227,7 @@ export function DemoPage() {
                 <div className="mt-5">
                   <Button type="submit" size="medium" disabled={busy}
                     leadingIcon={adaptIcon(ArrowRight02Icon, 20)}>
-                    {busy ? 'Envoi…' : 'Demander ma démo Companion'}
+                    {busy ? 'Envoi…' : ctaLabel}
                   </Button>
                   <p className="mt-3 text-caption-1-medium text-text-tertiary">
                     Démo personnalisée de 30 min · Aucun engagement · Vos données ne sont pas nécessaires pour la démonstration.
@@ -236,10 +248,10 @@ export function DemoPage() {
                   </ul>
                 </div>
                 <div className="rounded-2xl border border-border-button-default bg-background-secondary-default p-5">
-                  <p className="text-body-2-medium text-text-primary">Pilote de 30 jours</p>
+                  <p className="text-body-2-medium text-text-primary">Pilote accompagné — 350 000 FCFA (30 jours)</p>
                   <p className="mt-1 text-body-2-regular text-text-secondary">
                     Sur vos vrais cas : Knowledge Risk mesuré, premier handover assisté, premier onboarding
-                    généré. Offert, jusqu'à 25 utilisateurs.
+                    généré. Montant déduit des frais de déploiement si vous passez en Business.
                   </p>
                 </div>
               </aside>

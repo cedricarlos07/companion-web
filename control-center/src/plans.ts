@@ -18,7 +18,7 @@ export interface PlanDef {
 export const PLANS: Record<string, PlanDef> = {
   pilot: {
     label: 'Pilot',
-    priceAnnualFcf: 0,
+    priceAnnualFcf: 350_000, // pilote accompagné 30 jours — déduit du déploiement Business
     priceMonthlyFcf: null,
     installationFcf: 0,
     maxInstances: 1,

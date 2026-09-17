@@ -238,6 +238,12 @@ ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}
     res.json({ url: `/dl/${encodeURIComponent(token)}`, expiresInS: TOKEN_TTL_S })
   })
 
+  /** Police Inter (publique — aucun caractère sensible). */
+  router.get('/dl/font-inter', (_req: Request, res: Response) => {
+    res.setHeader('content-type', 'font/woff2')
+    res.sendFile(path.join(ASSETS_DIR, 'fonts', 'inter-latin.woff2'))
+  })
+
   /** Distribution : fichier servi uniquement avec un token valide et court. */
   router.get('/dl/:token', (req: Request, res: Response) => {
     const file = readDownloadToken(String(req.params.token))
@@ -264,6 +270,7 @@ ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}
       )
     )[0]
     const portalStyle = `<style>
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url('/dl/font-inter') format('woff2')}
 body{font:14px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:#f6f7f9;margin:0;color:#1a1d21}
 header{background:#101828;color:#fff;padding:10px 24px;display:flex;gap:18px;align-items:center}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px}
@@ -283,8 +290,10 @@ th,td{text-align:left;padding:9px 13px;border-bottom:1px solid #eef0f3;font-size
 tr:last-child td{border-bottom:0}
 .badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
 .ok{background:#dcfae6;color:#067647}.warn{background:#fef0c7;color:#b54708}.bad{background:#fee4e2;color:#b42318}.mute{background:#eef2f6;color:#475467}
-button{background:#1849a9;color:#fff;border:0;border-radius:9px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
-button:hover{background:#0f2f6b}
+button{background:#c4f68c;color:#101828;border:0;border-radius:9px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+button:hover{background:#b2ef70}
+a.btn{background:#c4f68c;color:#101828}
+a.btn:hover{background:#b2ef70}
 button.ghost{background:#eef2f6;color:#1a1d21}button.ghost:hover{background:#e4e9f0}
 code{background:#eef2f6;border-radius:6px;padding:2px 6px;font-size:12px;color:#101828}
 .msg{background:#eff6ff;border:1px solid #bfd8ff;color:#1849a9;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-size:13px}
@@ -293,8 +302,7 @@ ul.assets{list-style:none;padding:0;display:grid;gap:8px}
 ul.assets li{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:11px 15px;display:flex;justify-content:space-between;align-items:center;gap:12px}
 ul.assets li>span{font-size:13px;color:#344054;display:flex;align-items:center;gap:9px}
 ul.assets li svg{flex:none;color:#667085}
-a.btn{display:inline-block;background:#1849a9;color:#fff;border-radius:9px;padding:9px 15px;font-weight:600;font-size:13.5px;text-decoration:none}
-a.btn:hover{background:#0f2f6b}
+
 .muted{color:#667085}.fine{font-size:12.5px;color:#667085}
 </style>`
     const downloadSvg = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M4 19h16"/></svg>'
@@ -306,7 +314,9 @@ a.btn:hover{background:#0f2f6b}
     const body = `${headerHtml}
 <main>
 <h1>Bonjour ${customer?.name ?? '—'}</h1>
-<p class="sub">Votre espace Companion : licence, téléchargements et facturation.</p>
+<p class="sub">Votre espace de gestion Companion. Votre instance et vos données restent dans votre infrastructure —
+cet espace sert uniquement à <b>gérer votre licence</b>, <b>télécharger les kits officiels et les mises à jour</b>,
+<b>suivre vos factures</b> et voir les instances activées auprès de KamaLoka.</p>
 ${lic && lic.expires_at && new Date(lic.expires_at) < new Date() ? '<div class="msg amber">Votre licence a expiré — consultez la rubrique Renouvellement ou contactez votre interlocuteur Kamaloka. La consultation et les exports restent disponibles dans votre instance.</div>' : ''}
 ${latest && installed?.version && latest.version !== installed.version ? `<div class="msg">Une mise à jour est disponible : Companion ${installed.version} → <b>${latest.version}</b>. Aucune mise à jour n'est appliquée automatiquement.</div>` : ''}
 
