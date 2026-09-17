@@ -15,7 +15,8 @@
     "test:memory-providers": "node scripts/test-memory-providers.mjs",
     "test:agents": "node scripts/test-agents.mjs",
     "test:agent-security": "node scripts/test-agent-security.mjs",
-    "test:mcp": "node scripts/test-mcp.mjs"
+    "test:mcp": "node scripts/test-mcp.mjs",
+    "security:check": "bash scripts/security-check.sh"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.49",

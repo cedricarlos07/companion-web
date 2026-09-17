@@ -12,6 +12,7 @@ import { memorySearchEngine, reindexMemoriesFromDb } from './memory/index.js'
 import { buildAgentRouter, ensureAgentsSeeded } from './mastra/routes-agents.js'
 import { mountMcpHttp } from './mcp/http.js'
 import { buildMcpManagementRouter } from './mcp/routes-mcp.js'
+import { securityHeaders } from './middleware/security.js'
 import { buildActivepiecesRouter } from './activepieces/routes-ap.js'
 import { buildIntegrationsRouter } from './integrations/catalog.js'
 import { isActivepiecesEnabled, initializeExternalTools } from './activepieces/provider.js'
@@ -36,6 +37,7 @@ async function main() {
   app.use(cors({ origin: config.frontendOrigin, credentials: true }))
   app.use(express.json({ limit: '25mb' }))
   app.use(cookieParser())
+  app.use(securityHeaders)
 
   const autoSeed = process.env.AUTO_SEED !== '0'
   if (autoSeed) {
