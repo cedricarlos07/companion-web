@@ -15,6 +15,7 @@ import { buildMcpManagementRouter } from './mcp/routes-mcp.js'
 import { securityHeaders } from './middleware/security.js'
 import { buildActivepiecesRouter } from './activepieces/routes-ap.js'
 import { buildIntegrationsRouter } from './integrations/catalog.js'
+import { buildSetupRouter } from './setup.js'
 import { isActivepiecesEnabled, initializeExternalTools } from './activepieces/provider.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -76,6 +77,7 @@ async function main() {
   app.use('/api/mcp', buildMcpManagementRouter(dbh))
   app.use('/api/ap', buildActivepiecesRouter(dbh))
   app.use('/api/integrations', buildIntegrationsRouter(dbh))
+  app.use('/api/setup', buildSetupRouter(dbh))
   mountMcpHttp(app, dbh)
 
   // Serve the built frontend (self-hosted single binary mode).

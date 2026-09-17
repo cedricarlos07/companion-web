@@ -108,7 +108,8 @@ export class Mem0MemoryProvider implements MemoryProvider {
       this.lastError = undefined
     } catch (err) {
       this.lastError = String(err).slice(0, 300)
-      // Best-effort : une erreur Mem0 ne bloque jamais le métier.
+      console.error('[mem0] ERREUR add — Memory DEGRADED:', this.lastError)
+      // Une erreur Mem0 ne bloque pas le métier mais EST journalisée visiblement.
     }
   }
 
@@ -144,7 +145,8 @@ export class Mem0MemoryProvider implements MemoryProvider {
       return out
     } catch (err) {
       this.lastError = String(err).slice(0, 300)
-      return []
+      console.error('[mem0] ERREUR retrieval — Memory DEGRADED:', this.lastError)
+      throw new Error(`Memory degraded: ${this.lastError}`)
     }
   }
 
