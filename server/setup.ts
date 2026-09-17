@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
-import type { DbHandle } from '../db/client.js'
+import type { DbHandle } from './db/client.js'
 
 /**
  * Setup wizard — crée l'organisation, le owner et les données initiales
