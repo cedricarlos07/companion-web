@@ -70,8 +70,16 @@ export async function bootstrapActivepieces(
   apUrl: string,
   apToken: string,
   apProjectId: string,
-): Promise<{ created: number; existing: number }> {
+): Promise<{ created: number; existing: number; webhookSecret: string }> {
   const cfg: ActivepiecesConfig = { url: apUrl, token: apToken, projectId: apProjectId }
+
+  // Génère le secret webhook (stocké dans settings pour validation du endpoint).
+  const webhookSecret = require('node:crypto').randomBytes(32).toString('hex')
+  await dbh.exec(
+    `INSERT INTO settings (organization_id, key, value) VALUES ('${organizationId}', 'webhook_secret', '"${webhookSecret}"')
+     ON CONFLICT (organization_id, key) DO UPDATE SET value = '"${webhookSecret}"', updated_at = now()`,
+  )
+  const companionUrl = process.env.COMPAION_URL ?? 'http://host.docker.internal:5299'
 
   // Liste les flows existants pour éviter les doublons
   const existing = await apRequest<{ data: { displayName: string }[] }>(
@@ -88,7 +96,8 @@ export async function bootstrapActivepieces(
       continue
     }
     try {
-      const trigger: Record<string, unknown> = template.triggerName
+      const isTrigger = Boolean(template.triggerName)
+      const trigger: Record<string, unknown> = isTrigger
         ? {
             type: 'PIECE_TRIGGER',
             name: 'trigger',
@@ -98,11 +107,21 @@ export async function bootstrapActivepieces(
               input: {},
             },
           }
-        : {
-            type: 'EMPTY',
-            name: 'manual',
-            settings: {},
-          }
+        : { type: 'EMPTY', name: 'manual', settings: {} }
+
+      // Pour les flows d'ingestion : ajoute un step HTTP POST vers Companion
+      const steps: Record<string, unknown> = {}
+      if (isTrigger && template.displayName.includes('Ingestion')) {
+        steps['notify_companion'] = {
+          type: 'CODE',
+          name: 'notify_companion',
+          settings: {
+            input: {
+              code: `fetch('${companionUrl}/api/ap/webhooks/activepieces/file', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ${webhookSecret}' }, body: JSON.stringify({ fileName: trigger.name, content: JSON.stringify(trigger), sourceName: '${template.pieceName}' }) })`,
+            },
+          },
+        }
+      }
 
       await apRequest(cfg, 'POST', '/flows', {
         projectId: apProjectId,
@@ -111,7 +130,7 @@ export async function bootstrapActivepieces(
           valid: true,
           schemaVersion: 1,
           trigger,
-          steps: {},
+          steps,
         },
       })
       created++
@@ -130,7 +149,7 @@ export async function bootstrapActivepieces(
     }),
   )
 
-  return { created, existing: existingCount }
+  return { created, existing: existingCount, webhookSecret }
 }
 
 /** Liste les connections Activepieces disponibles pour ce projet. */

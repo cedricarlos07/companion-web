@@ -18,6 +18,7 @@ import { buildIntegrationsRouter } from './integrations/catalog.js'
 import { buildSetupRouter } from './setup.js'
 import { isActivepiecesEnabled, initializeExternalTools } from './activepieces/provider.js'
 import { bootstrapActivepieces } from './activepieces/bootstrap.js'
+import { startReconciler } from './activepieces/reconciler.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -68,6 +69,10 @@ async function main() {
       void bootstrapActivepieces(dbh, primaryOrgId, apUrl, apToken, apProjectId)
         .then((r) => console.log(`[companion] Activepieces : ${r.created} flow(s) créés, ${r.existing} existants`))
         .catch((err) => console.warn('[companion] Activepieces bootstrap échoué:', String(err).slice(0, 150)))
+      // Connection reconciler : détecte les connexions ACTIVE et active les flows.
+      const { startReconciler } = await import('./activepieces/reconciler.js')
+      startReconciler(dbh, primaryOrgId, { url: apUrl, token: apToken, projectId: apProjectId }, 30_000)
+      console.log('[companion] Connection reconciler démarré (30s)')
     }
   }
 

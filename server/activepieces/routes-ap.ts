@@ -20,10 +20,19 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
     res.json(health)
   })
 
-  /** Webhook : Activepieces pousse un fichier Drive (Read File Content → POST structuré). */
+  /** Webhook : Activepieces pousse un fichier (auth Bearer secret requis). */
   router.post('/webhooks/activepieces/file', async (req, res) => {
     if (!isActivepiecesEnabled()) {
       return res.status(403).json({ error: 'Activepieces non configuré' })
+    }
+    // Auth: Bearer secret depuis settings
+    const secretRows = await dbh.query<{ value: string }>(
+      `SELECT value FROM settings WHERE organization_id = (SELECT id FROM organizations ORDER BY created_at LIMIT 1) AND key = 'webhook_secret'`,
+    ).catch(() => [])
+    const expectedSecret = secretRows[0]?.value ? JSON.parse(secretRows[0].value) : null
+    const auth = req.headers.authorization?.replace('Bearer ', '')
+    if (!expectedSecret || auth !== expectedSecret) {
+      return res.status(401).json({ error: 'webhook secret invalide' })
     }
     const { fileName, content, mimeType, sourceName, employeeId, externalId, provider } = req.body as {
       fileName?: string; content?: string; mimeType?: string; sourceName?: string
@@ -84,6 +93,15 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
     } catch (err) {
       res.status(500).json({ error: String(err).slice(0, 300) })
     }
+  })
+
+  /** Connecter une application : retourne l'URL de connexion Activepieces. */
+  router.post('/connect/:pieceName', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+    const pieceName = req.params.pieceName as string
+    const apUrl = process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'
+    // Le client SDK Activepieces gère l'OAuth depuis cette URL.
+    const oauthUrl = `${apUrl}/projects/current/connections/new?pieceName=${pieceName}`
+    res.json({ oauthUrl, pieceName })
   })
 
   /** Liste les tools externes Activepieces disponibles. */
