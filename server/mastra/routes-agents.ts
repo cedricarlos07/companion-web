@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { DbHandle } from '../db/client.js'
 import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
+import { licenseGate } from '../services/license-mode.js'
 import { startAgentRun, resumeAgentRun, rememberWorkflowId } from './runs.js'
 import { dispatchEvent } from './triggers.js'
 import { AGENT_SEEDS, primaryOrganizationId } from './seed-agents.js'
@@ -46,7 +47,7 @@ export function buildAgentRouter(dbh: DbHandle): Router {
 
   /* -------------------------------- Runs ---------------------------------- */
 
-  router.post('/agents/:id/runs', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  router.post('/agents/:id/runs', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const { agentKey, workflowId, goal, skill, inputData } = req.body as {
       agentKey?: string; workflowId?: string; goal?: string; skill?: string; inputData?: Record<string, unknown>
     }
@@ -101,7 +102,7 @@ export function buildAgentRouter(dbh: DbHandle): Router {
     res.json({ ok: true })
   })
 
-  router.post('/runs/:id/resume', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  router.post('/runs/:id/resume', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const { resumeData } = req.body as { resumeData?: Record<string, unknown> }
     try {
       const run = await resumeAgentRun(dbh, req.params.id as string, resumeData ?? {}, req.user!.name)
@@ -126,7 +127,7 @@ export function buildAgentRouter(dbh: DbHandle): Router {
     res.json({ approvals: rows })
   })
 
-  router.post('/approvals/:id/approve', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  router.post('/approvals/:id/approve', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const approval = (
       await dbh.query<{ id: string; run_id: string | null; status: string }>(
         `SELECT id, run_id, status FROM approvals WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`,

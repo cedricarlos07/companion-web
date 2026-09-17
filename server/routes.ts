@@ -10,6 +10,7 @@ import { ingestDocument, extractTextFromFile, storagePathFor } from './services/
 import { askCompanion } from './services/ask.js'
 import { createMemory, updateMemory, promoteToRole } from './services/memory.js'
 import { orgRiskOverview, computeEmployeeRisk, computeRoleRisk } from './services/risk.js'
+import { licenseGate } from './services/license-mode.js'
 import { startHandover, answerInterviewQuestion, generateHandoverPack } from './services/handover.js'
 import { generateOnboarding } from './services/onboarding.js'
 import { ollamaStatus } from './providers/ollama.js'
@@ -453,9 +454,10 @@ export function buildApiRouter(dbh: DbHandle): Router {
     res.json({ invitations: rows })
   })
 
-  api.post('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  api.post('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const { email, role } = req.body as { email?: string; role?: string }
     if (!email || !role) return res.status(400).json({ error: 'email et role requis' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'adresse email invalide' })
     const { createInvitation } = await import('./services/auth-completion.js')
     const result = await createInvitation(dbh, req.user!.organizationId, email, role, req.user!.id, req.user!.name)
     await audit(dbh, req.user!.organizationId, {
@@ -543,8 +545,95 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   api.get('/license', authRequired(dbh), async (req, res) => {
     const { checkLicenseStatus } = await import('./services/licenses.js')
+    const { getLicenseMode, getInstanceId } = await import('./services/license-mode.js')
     const license = await checkLicenseStatus(dbh, req.user!.organizationId)
-    res.json(license)
+    const mode = await getLicenseMode(dbh, req.user!.organizationId)
+    const instanceId = await getInstanceId(dbh, req.user!.organizationId)
+    res.json({
+      ...license,
+      mode: mode.mode,
+      plan: mode.plan,
+      licenseId: mode.licenseId,
+      expiresAt: mode.expiresAt,
+      graceUntil: mode.graceUntil,
+      daysLeft: mode.daysLeft,
+      message: mode.message,
+      instanceId,
+    })
+  })
+
+  /* Import d'une licence .lic signée par Kamaloka (offline) — owner uniquement. */
+  api.post('/license/import', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    const { license } = req.body as { license?: string }
+    if (!license) return res.status(400).json({ error: 'contenu de licence requis (fichier .lic)' })
+    const { verifyLicense } = await import('./services/licenses.js')
+    const verification = verifyLicense(license)
+    if (verification.status === 'invalid' || verification.status === 'not_configured' || !verification.payload) {
+      return res.status(400).json({ error: verification.error ?? 'licence invalide' })
+    }
+    const payload = verification.payload
+    const existing = await dbh
+      .query<{ id: string }>(`SELECT id FROM licenses WHERE license_key_hash = '${payload.licenseId.replace(/'/g, "''")}' AND organization_id = '${req.user!.organizationId}' ORDER BY created_at DESC LIMIT 1`)
+      .catch(() => [])
+
+    const GRACE_DAYS = Math.max(0, Number(process.env.LICENSE_GRACE_DAYS ?? 30))
+    const graceUntil = payload.expiresAt
+      ? new Date(new Date(payload.expiresAt).getTime() + GRACE_DAYS * 86_400_000).toISOString()
+      : null
+    // Toutes les autres lignes passent en 'replaced' — une seule licence active à la fois.
+    await dbh.exec(`UPDATE licenses SET status = 'replaced' WHERE organization_id = '${req.user!.organizationId}'`)
+    if (existing[0]) {
+      // Ré-import / renouvellement d'une même licence : mise à jour de la ligne existante.
+      await dbh.exec(
+        `UPDATE licenses SET status = 'active', plan = '${payload.plan}',
+         entitlements = '${JSON.stringify(payload.entitlements ?? {}).replace(/'/g, "''")}'::jsonb,
+         expires_at = ${payload.expiresAt ? `'${payload.expiresAt}'` : 'NULL'},
+         grace_until = ${graceUntil ? `'${graceUntil}'` : 'NULL'},
+         signature = '${license.replace(/'/g, "''")}'
+         WHERE id = '${existing[0].id}'`,
+      )
+    } else {
+      await dbh.exec(
+        `INSERT INTO licenses (organization_id, license_key_hash, plan, status, entitlements, issued_at, expires_at, grace_until, signature)
+         VALUES ('${req.user!.organizationId}', '${payload.licenseId.replace(/'/g, "''")}', '${payload.plan}', 'active',
+                 '${JSON.stringify(payload.entitlements ?? {}).replace(/'/g, "''")}'::jsonb,
+                 '${payload.issuedAt}',
+                 ${payload.expiresAt ? `'${payload.expiresAt}'` : 'NULL'},
+                 ${graceUntil ? `'${graceUntil}'` : 'NULL'},
+                 '${license.replace(/'/g, "''")}')`,
+      )
+    }
+    // La licence active le plan : les limites d'entitlements suivent automatiquement.
+    await dbh.exec(
+      `INSERT INTO org_entitlements (organization_id, plan) VALUES ('${req.user!.organizationId}', '${payload.plan}')
+       ON CONFLICT (organization_id) DO UPDATE SET plan = '${payload.plan}', updated_at = now()`,
+    )
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'license.imported', targetType: 'license', targetId: payload.licenseId,
+      detail: { plan: payload.plan, expiresAt: payload.expiresAt },
+    })
+    res.json({ ok: true, plan: payload.plan, licenseId: payload.licenseId, expiresAt: payload.expiresAt, graceUntil })
+  })
+
+  /* Retire la licence installée (retour à l'essai) — owner uniquement. */
+  api.delete('/license', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    await dbh.exec(`UPDATE licenses SET status = 'revoked' WHERE organization_id = '${req.user!.organizationId}'`)
+    await dbh.exec(`UPDATE org_entitlements SET plan = 'pilot', updated_at = now() WHERE organization_id = '${req.user!.organizationId}'`)
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'license.removed', targetType: 'license', targetId: req.user!.organizationId, detail: {},
+    })
+    res.json({ ok: true })
+  })
+
+  /* Signature de test avec la paire éphémère de dev — 404 en production. */
+  api.post('/license/dev-sign', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not found' })
+    const { devSignLicense } = await import('./services/licenses.js')
+    try {
+      res.json({ license: devSignLicense(req.body as Parameters<typeof devSignLicense>[0]) })
+    } catch (err) {
+      res.status(400).json({ error: String(err).slice(0, 200) })
+    }
   })
 
   api.get('/billing/usage', authRequired(dbh), async (req, res) => {

@@ -4,6 +4,7 @@ import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
 import { dispatchEvent } from '../mastra/triggers.js'
 import { isActivepiecesEnabled, initializeExternalTools, externalHealth } from '../activepieces/provider.js'
+import { licenseGate } from '../services/license-mode.js'
 import { ingestDocument } from '../services/ingestion.js'
 
 /**
@@ -96,7 +97,7 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
   })
 
   /** Connecter une application : retourne l'URL de connexion Activepieces. */
-  router.post('/connect/:pieceName', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  router.post('/connect/:pieceName', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const pieceName = req.params.pieceName as string
     const apUrl = process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'
     // Le client SDK Activepieces gère l'OAuth depuis cette URL.

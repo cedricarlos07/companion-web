@@ -6,6 +6,7 @@ import { Chip } from '@/components/base/badges/chip'
 import { Button } from '@/components/base/buttons/button'
 import { api } from '@/services/api'
 import { useAppStore } from '@/store/app-store'
+import { cx } from '@/utils/cx'
 
 interface UsageReport {
   period: string
@@ -25,7 +26,14 @@ interface UsageReport {
 interface LicenseInfo {
   valid: boolean
   status: 'active' | 'expired' | 'invalid' | 'not_configured'
-  payload?: { plan?: string; expiresAt?: string | null }
+  mode?: 'active' | 'grace' | 'restricted'
+  plan?: string
+  licenseId?: string | null
+  expiresAt?: string | null
+  graceUntil?: string | null
+  daysLeft?: number | null
+  message?: string
+  instanceId?: string
   error?: string
 }
 
@@ -57,6 +65,15 @@ export function BillingPage() {
   const { pushToast } = useAppStore()
   const [usage, setUsage] = useState<UsageReport | null>(null)
   const [license, setLicense] = useState<LicenseInfo | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [licenseContent, setLicenseContent] = useState('')
+  const [importing, setImporting] = useState(false)
+
+  const loadLicense = () => {
+    api.request<LicenseInfo>('/license').then((l) => {
+      if (l) setLicense(l)
+    })
+  }
 
   useEffect(() => {
     let alive = true
@@ -73,10 +90,35 @@ export function BillingPage() {
     }
   }, [])
 
-  const planKey = license?.payload?.plan ?? usage?.plan ?? 'pilot'
+  async function importLicense() {
+    if (!licenseContent.trim()) return
+    setImporting(true)
+    try {
+      const res = await fetch('/api/license/import', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license: licenseContent.trim() }),
+      })
+      const data = await res.json().catch(() => null) as { error?: string; plan?: string } | null
+      if (!res.ok) {
+        pushToast(data?.error ?? 'Import impossible — licence refusée.', 'error')
+        return
+      }
+      pushToast(`Licence installée — plan ${data?.plan ?? ''} activé.`)
+      setImportOpen(false)
+      setLicenseContent('')
+      loadLicense()
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const planKey = license?.plan ?? usage?.plan ?? 'pilot'
   const planLabel = PLAN_LABEL[planKey] ?? planKey
   const statusLabel = STATUS_LABEL[license?.status ?? 'not_configured']
-  const expiresAt = license?.payload?.expiresAt
+  const expiresAt = license?.expiresAt
+  const mode = license?.mode ?? 'active'
 
   return (
     <div className="space-y-4">
@@ -85,32 +127,63 @@ export function BillingPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Plan actuel */}
         <Card title="Plan actuel">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-title-2-semibold text-text-primary">{planLabel}</span>
-            <Chip variant="subtle" color={license && !license.valid ? 'rose' : 'lime'}>
-              {statusLabel}
+            <Chip
+              variant="subtle"
+              color={mode === 'restricted' ? 'rose' : mode === 'grace' ? 'yellow' : 'lime'}
+            >
+              {mode === 'restricted' ? 'Mode restreint' : mode === 'grace' ? 'Période de grâce' : statusLabel}
             </Chip>
           </div>
-          {expiresAt && (
-            <p className="mt-1 text-body-2-medium text-text-secondary">
-              Renouvellement le {new Date(expiresAt).toLocaleDateString('fr-FR')}
+          {license?.message && (
+            <p className={cx('mt-2 text-body-2-medium', mode === 'restricted' ? 'text-text-error-primary' : 'text-text-secondary')}>
+              {license.message}
             </p>
           )}
-          {license && !license.valid && license.error && (
-            <p className="mt-1 text-body-2-medium text-text-error-primary">{license.error}</p>
+          {expiresAt && (
+            <p className="mt-1 text-body-2-medium text-text-secondary">
+              Expire le {new Date(expiresAt).toLocaleDateString('fr-FR')}
+              {license?.graceUntil && mode !== 'active' && (
+                <> · grâce jusqu'au {new Date(license.graceUntil).toLocaleDateString('fr-FR')}</>
+              )}
+            </p>
           )}
-          <p className="mt-3 text-caption-1-medium text-text-tertiary">
-            Licence auto-hébergée signée · vérification hors-ligne · clé installée via Paramètres → Avancé.
-          </p>
-          <div className="mt-3">
+          {license?.licenseId && (
+            <p className="mt-1 text-caption-1-medium text-text-tertiary">Licence {license.licenseId}</p>
+          )}
+          {license?.instanceId && (
+            <p className="mt-1 text-caption-1-medium text-text-tertiary">
+              Instance <span className="tabular-nums">{license.instanceId}</span>
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" size="small" onClick={() => setImportOpen((o) => !o)}>
+              {importOpen ? 'Annuler' : 'Importer une licence'}
+            </Button>
             <Button
-              variant="secondary"
+              variant="ghost"
               size="small"
-              onClick={() => pushToast('Contactez votre interlocuteur KamaLoka pour changer de plan.', 'info')}
+              onClick={() => pushToast('Contactez votre interlocuteur Kamaloka pour changer de plan.', 'info')}
             >
               Changer de plan
             </Button>
           </div>
+          {importOpen && (
+            <div className="mt-3 space-y-2">
+              <textarea
+                aria-label="Contenu de la licence"
+                value={licenseContent}
+                onChange={(e) => setLicenseContent(e.target.value)}
+                rows={5}
+                placeholder="Collez ici le contenu du fichier companion-license.lic…"
+                className="w-full rounded-xl border border-border-button-default bg-background-primary-default p-3 font-mono text-caption-1-medium text-text-primary outline-none focus:ring-2 focus:ring-border-focus-ring"
+              />
+              <Button size="small" onClick={importLicense} disabled={importing || !licenseContent.trim()}>
+                {importing ? 'Vérification…' : 'Vérifier et activer'}
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* Mode de facturation IA */}

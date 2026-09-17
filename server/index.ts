@@ -118,6 +118,8 @@ async function main() {
 
   app.listen(config.port, () => {
     console.log(`[companion] API prête sur http://localhost:${config.port} (driver: ${dbh.driver}, moteur mémoire: ${memorySearchEngine()})`)
+    // Self-hosted Connected : heartbeat licence quotidien (métadonnées seulement, best-effort).
+    void import('./services/license-mode.js').then(({ startLicenseHeartbeat }) => startLicenseHeartbeat(dbh, '1.0.0'))
   })
 }
 
