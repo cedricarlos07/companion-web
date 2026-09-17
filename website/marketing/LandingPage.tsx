@@ -19,10 +19,20 @@ import handoversImg from './assets/handovers.png'
 import brainImg from './assets/brain.png'
 import approvalsImg from './assets/approvals.png'
 
-/* Surface marketing — companion.kamaloka.ai. Style bento (réf. lattice.com).
- * Apparitions au scroll, icônes systématiques, copy soudé. */
+/* Surface marketing — companion.kamaloka.ai. Style bento (réf. lattice.com) :
+ * chips d'icônes colorées, blobs de dégradé, bande sombre, apparitions au scroll. */
 
 type Icon = IconSvgElement
+type Tone = 'lime' | 'blue' | 'purple' | 'amber' | 'rose' | 'cyan'
+
+const TONE_CHIP: Record<Tone, string> = {
+  lime: 'bg-companion-300/50 text-lime-900',
+  blue: 'bg-blue-100 text-blue-700',
+  purple: 'bg-purple-100 text-purple-700',
+  amber: 'bg-amber-100 text-amber-700',
+  rose: 'bg-rose-100 text-rose-600',
+  cyan: 'bg-cyan-100 text-cyan-700',
+}
 
 /** Apparition douce au scroll (respecte prefers-reduced-motion). */
 function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
@@ -100,23 +110,22 @@ function Header() {
   )
 }
 
-function Section({ id, soft, dark, children }: { id?: string; soft?: boolean; dark?: boolean; children: ReactNode }) {
+function Section({ id, soft, dark, children, className = '' }: { id?: string; soft?: boolean; dark?: boolean; children: ReactNode; className?: string }) {
   return (
-    <section id={id} className={dark ? 'bg-brand-black' : soft ? 'bg-background-secondary-default' : undefined}>
-      <div className="mx-auto max-w-6xl px-6 py-20">{children}</div>
+    <section id={id} className={dark ? 'bg-brand-black text-white' : soft ? 'bg-background-secondary-default' : undefined}>
+      <div className={cx('mx-auto max-w-6xl px-6 py-20', className)}>{children}</div>
     </section>
   )
 }
 
-function Eyebrow({ children }: { children: ReactNode }) {
+function Eyebrow({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
   return (
-    <span className="mb-4 inline-flex items-center gap-1.5 text-caption-1-medium uppercase tracking-[0.14em] text-accent-600">
+    <span className={cx('mb-4 inline-flex items-center gap-1.5 text-caption-1-medium uppercase tracking-[0.14em]', dark ? 'text-companion-300' : 'text-accent-600')}>
       {children}
     </span>
   )
 }
 
-/** Titre de section centré avec sous-ligne. */
 function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: ReactNode; sub?: ReactNode }) {
   return (
     <Reveal className="mx-auto max-w-3xl text-center">
@@ -127,11 +136,20 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: ReactNod
   )
 }
 
-/** Carte avec survol vif. */
-function Card({ icon, title, children, className = '' }: { icon?: Icon; title: string; children?: ReactNode; className?: string }) {
+/** Carte avec chip d'icône colorée (façon Lattice). */
+function Card({ icon, tone = 'blue', title, children, className = '' }: {
+  icon?: Icon; tone?: Tone; title: string; children?: ReactNode; className?: string
+}) {
   return (
-    <div className={`rounded-2xl border border-border-button-default bg-background-primary-default p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${className}`}>
-      {icon && <HugeIcon icon={icon} size="lg" className="mb-3 text-accent-500" />}
+    <div className={cx(
+      'h-full rounded-2xl border border-border-button-default bg-background-primary-default p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-lg',
+      className,
+    )}>
+      {icon && (
+        <span className={cx('mb-3 flex size-11 items-center justify-center rounded-xl', TONE_CHIP[tone])}>
+          <HugeIcon icon={icon} size="md" />
+        </span>
+      )}
       <h3 className="text-headline-medium text-text-primary">{title}</h3>
       {children && <p className="mt-1.5 text-body-2-regular text-text-secondary">{children}</p>}
     </div>
@@ -287,7 +305,8 @@ export function LandingPage() {
 
       {/* 1 · Hero */}
       <section className="relative overflow-hidden">
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[560px] bg-gradient-to-b from-accent-100/60 to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute -left-40 -top-40 size-[520px] rounded-full bg-companion-300/25 blur-[120px]" />
+        <div aria-hidden className="pointer-events-none absolute -right-40 top-24 size-[480px] rounded-full bg-accent-500/15 blur-[120px]" />
         <div className="relative mx-auto max-w-6xl px-6 pb-16 pt-16 text-center">
           <Reveal>
             <p className="text-headline-medium text-text-secondary">Votre meilleur employé peut partir demain.</p>
@@ -310,11 +329,23 @@ export function LandingPage() {
               </ButtonLink>
               <ButtonLink variant="secondary" size="medium" href="/demo">Demander une démonstration</ButtonLink>
             </div>
-            <p className="mt-6 text-caption-1-medium text-text-tertiary">
-              Départs · Turnover · Procédures oubliées · Décisions perdues · Dépendance aux personnes clés
-            </p>
           </Reveal>
-          <Reveal delay={150} className="mx-auto mt-12 max-w-5xl">
+          <Reveal delay={120}>
+            <div className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { v: '100 %', l: 'réponses citées' },
+                { v: '760+', l: 'intégrations' },
+                { v: '~1 h', l: 'installation prête' },
+                { v: '0', l: 'donnée qui sort' },
+              ].map((s) => (
+                <div key={s.l} className="rounded-2xl border border-border-button-default bg-background-primary-default/80 px-4 py-4 shadow-card">
+                  <p className="text-title-3-semibold text-text-primary">{s.v}</p>
+                  <p className="text-caption-1-medium text-text-tertiary">{s.l}</p>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+          <Reveal delay={200} className="mx-auto mt-12 max-w-5xl">
             <Shot src={askImg} alt="Ask Companion — réponse citée avec niveau de confiance et sources" />
             <p className="mt-3 text-caption-1-medium text-text-tertiary">
               Ask Companion — chaque réponse cite ses sources. Contexte insuffisant ? Companion s'abstient.
@@ -331,16 +362,18 @@ export function LandingPage() {
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            { icon: UserCircleIcon, t: 'Ses clients', d: 'leurs habitudes, leur historique, leur confiance.' },
-            { icon: DocumentValidationIcon, t: 'Ses appels d\'offres', d: 'la méthode exacte qui gagne les marchés.' },
-            { icon: NetworkIcon, t: 'Les exceptions', d: 'ce que aucun procédure écrite ne couvre.' },
-            { icon: HistoryIcon, t: 'Ses contacts', d: 'qui appeler, quand, et comment.' },
-            { icon: ShieldAlertIcon, t: 'Ses erreurs', d: 'celles à ne plus jamais refaire.' },
+            { icon: UserCircleIcon, tone: 'rose' as Tone, t: 'Ses clients', d: 'leurs habitudes, leur historique, leur confiance.' },
+            { icon: DocumentValidationIcon, tone: 'amber' as Tone, t: "Ses appels d'offres", d: 'la méthode exacte qui gagne les marchés.' },
+            { icon: NetworkIcon, tone: 'purple' as Tone, t: 'Les exceptions', d: "ce qu'aucune procédure écrite ne couvre." },
+            { icon: HistoryIcon, tone: 'cyan' as Tone, t: 'Ses contacts', d: 'qui appeler, quand, et comment.' },
+            { icon: ShieldAlertIcon, tone: 'blue' as Tone, t: 'Ses erreurs', d: 'celles à ne plus jamais refaire.' },
           ].map((item, i) => (
             <Reveal key={item.t} delay={i * 90}>
               <div className="h-full rounded-2xl border border-border-button-default bg-background-primary-default p-4 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                <HugeIcon icon={item.icon} size="md" className="text-rose-500" />
-                <p className="mt-2.5 text-body-2-semibold text-text-primary">{item.t}</p>
+                <span className={cx('mb-2.5 flex size-10 items-center justify-center rounded-xl', TONE_CHIP[item.tone])}>
+                  <HugeIcon icon={item.icon} size="md" />
+                </span>
+                <p className="text-body-2-semibold text-text-primary">{item.t}</p>
                 <p className="mt-0.5 text-caption-1-medium text-text-secondary">{item.d}</p>
               </div>
             </Reveal>
@@ -366,15 +399,15 @@ export function LandingPage() {
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            { icon: UserCircleIcon, t: 'Qui détient un savoir critique ?', d: 'Chaque connaissance est rattachée à son propriétaire — les dépendances deviennent visibles.' },
-            { icon: ShieldAlertIcon, t: 'Quel poste représente un risque ?', d: 'Un score par poste, calculé sur la couverture, la fraîcheur et la dépendance.' },
-            { icon: FileEditIcon, t: 'Quelle procédure n\'existe que dans une tête ?', d: 'Les procédures sans doublon ni documentation sont signalées automatiquement.' },
-            { icon: RocketIcon, t: 'Que doit apprendre un remplaçant, maintenant ?', d: 'Le plan J1 · J7 · J30 se construit depuis le poste, pas depuis des suppositions.' },
-            { icon: HistoryIcon, t: 'Quelle décision a été prise, et pourquoi ?', d: 'Chaque réponse cite sa source — jusqu\'à la réunion d\'origine.' },
-            { icon: BotIcon, t: 'Vos agents IA peuvent-ils y accéder, en sécurité ?', d: 'Oui — avec vos permissions, jamais au-delà, et sous approbation pour toute action sensible.' },
+            { icon: UserCircleIcon, tone: 'blue' as Tone, t: 'Qui détient un savoir critique ?', d: 'Chaque connaissance est rattachée à son propriétaire — les dépendances deviennent visibles.' },
+            { icon: ShieldAlertIcon, tone: 'rose' as Tone, t: 'Quel poste représente un risque ?', d: 'Un score par poste, calculé sur la couverture, la fraîcheur et la dépendance.' },
+            { icon: FileEditIcon, tone: 'amber' as Tone, t: "Quelle procédure n'existe que dans une tête ?", d: 'Les procédures sans doublon ni documentation sont signalées automatiquement.' },
+            { icon: RocketIcon, tone: 'lime' as Tone, t: 'Que doit apprendre un remplaçant, maintenant ?', d: 'Le plan J1 · J7 · J30 se construit depuis le poste, pas depuis des suppositions.' },
+            { icon: HistoryIcon, tone: 'cyan' as Tone, t: 'Quelle décision a été prise, et pourquoi ?', d: "Chaque réponse cite sa source — jusqu'à la réunion d'origine." },
+            { icon: BotIcon, tone: 'purple' as Tone, t: 'Vos agents IA peuvent-ils y accéder, en sécurité ?', d: 'Oui — avec vos permissions, jamais au-delà, et sous approbation pour toute action sensible.' },
           ].map((c, i) => (
             <Reveal key={c.t} delay={(i % 3) * 100}>
-              <Card icon={c.icon} title={c.t}>{c.d}</Card>
+              <Card icon={c.icon} tone={c.tone} title={c.t}>{c.d}</Card>
             </Reveal>
           ))}
         </div>
@@ -399,7 +432,7 @@ export function LandingPage() {
             </BentoShot>
           </Reveal>
           <Reveal delay={120}>
-            <Card icon={Database01Icon} title="Un cerveau d'entreprise traçable">
+            <Card icon={Database01Icon} tone="blue" title="Un cerveau d'entreprise traçable">
               Le socle vérifié : procédures, décisions, faits — chacun avec sa source, son propriétaire
               et son statut. Les contradictions sont signalées, jamais écrasées.
             </Card>
@@ -412,7 +445,7 @@ export function LandingPage() {
             </BentoShot>
           </Reveal>
           <Reveal delay={120}>
-            <Card icon={RocketIcon} title="Arrêtez de faire recommencer chaque nouvel employé à zéro.">
+            <Card icon={RocketIcon} tone="lime" title="Arrêtez de faire recommencer chaque nouvel employé à zéro.">
               Companion assemble ce que le poste exige, ce que le prédécesseur a transmis, les procédures
               actives, les projets en cours, les personnes à connaître et les erreurs déjà commises.
               <b className="font-semibold text-text-primary"> J1. J7. J30. Le bon contexte, au bon moment.</b>
@@ -438,9 +471,9 @@ export function LandingPage() {
               Une action sensible ? Elle attend votre approbation.
             </p>
             <div className="mt-7 grid gap-4 sm:grid-cols-3">
-              <Card icon={ShieldKeyIcon} title="Permissions propagées">Un agent commercial ne voit jamais un dossier RH.</Card>
-              <Card icon={DocumentValidationIcon} title="Approbations">L'agent propose, un humain approuve.</Card>
-              <Card icon={FileEditIcon} title="Corrections">Chaque correction enrichit la mémoire.</Card>
+              <Card icon={ShieldKeyIcon} tone="blue" title="Permissions propagées">Un agent commercial ne voit jamais un dossier RH.</Card>
+              <Card icon={DocumentValidationIcon} tone="lime" title="Approbations">L'agent propose, un humain approuve.</Card>
+              <Card icon={FileEditIcon} tone="purple" title="Corrections">Chaque correction enrichit la mémoire.</Card>
             </div>
           </Reveal>
           <Reveal delay={150}>
@@ -449,7 +482,23 @@ export function LandingPage() {
         </div>
       </Section>
 
-      {/* 6 · Intégrations */}
+      {/* 6 · Bandeau signature de marque */}
+      <Section dark className="!py-14">
+        <Reveal className="text-center">
+          <p className="text-caption-1-medium uppercase tracking-[0.2em] text-companion-300">Companion</p>
+          <p
+            className="mx-auto mt-4 max-w-3xl font-medium text-white"
+            style={{ fontSize: 'clamp(30px,4.5vw,48px)', lineHeight: 1.15 }}
+          >
+            « Votre entreprise n'oublie plus. »
+          </p>
+          <p className="mx-auto mt-4 max-w-xl text-body-regular text-white/60">
+            Les personnes passent. Le savoir reste — dans votre infrastructure, sous vos règles.
+          </p>
+        </Reveal>
+      </Section>
+
+      {/* 7 · Intégrations */}
       <Section soft>
         <SectionHead
           eyebrow="Intégrations"
@@ -463,24 +512,26 @@ export function LandingPage() {
         </Reveal>
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: GoogleDriveIcon, t: 'Google Workspace', d: 'Drive, Gmail, Docs — ingestion continue et sourcée.' },
-            { icon: MicrosoftIcon, t: 'Microsoft 365', d: 'SharePoint, Teams, Outlook — le contexte de vos échanges.' },
-            { icon: WhatsappIcon, t: 'WhatsApp Business', d: 'Les décisions prises dans les discussions deviennent de la mémoire.' },
-            { icon: PlugIcon, t: 'Odoo, Slack, Notion, CRM…', d: 'Vos processus et vos espaces de travail, déjà connectés.' },
+            { icon: GoogleDriveIcon, tone: 'blue' as Tone, t: 'Google Workspace', d: 'Drive, Gmail, Docs — ingestion continue et sourcée.' },
+            { icon: MicrosoftIcon, tone: 'cyan' as Tone, t: 'Microsoft 365', d: 'SharePoint, Teams, Outlook — le contexte de vos échanges.' },
+            { icon: WhatsappIcon, tone: 'lime' as Tone, t: 'WhatsApp Business', d: 'Les décisions prises dans les discussions deviennent de la mémoire.' },
+            { icon: PlugIcon, tone: 'purple' as Tone, t: 'Odoo, Slack, Notion, CRM…', d: 'Vos processus et vos espaces de travail, déjà connectés.' },
           ].map((c, i) => (
             <Reveal key={c.t} delay={i * 90}>
-              <Card icon={c.icon} title={c.t}>{c.d}</Card>
+              <Card icon={c.icon} tone={c.tone} title={c.t}>{c.d}</Card>
             </Reveal>
           ))}
         </div>
       </Section>
 
-      {/* 7 · Self-hosted */}
-      <Section>
-        <SectionHead
-          eyebrow="Self-hosted"
-          title={<>Votre mémoire d'entreprise n'a rien à faire<br />dans le cloud de quelqu'un d'autre.</>}
-        />
+      {/* 8 · Self-hosted — bande sombre */}
+      <Section dark>
+        <Reveal className="mx-auto max-w-3xl text-center">
+          <Eyebrow dark>Self-hosted</Eyebrow>
+          <h2 className="text-title-2-medium text-white">
+            Votre mémoire d'entreprise n'a rien à faire<br />dans le cloud de quelqu'un d'autre.
+          </h2>
+        </Reveal>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: ServerStack01Icon, t: 'Votre VPS', d: 'Le déploiement le plus courant — opérationnel en une heure.' },
@@ -489,27 +540,29 @@ export function LandingPage() {
             { icon: Building01Icon, t: 'Votre infrastructure', d: 'Là où vos autres outils critiques vivent déjà.' },
           ].map((c, i) => (
             <Reveal key={c.t} delay={i * 90}>
-              <div className="h-full rounded-2xl border border-border-button-default bg-background-primary-default p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                <HugeIcon icon={c.icon} size="lg" className="mb-3 text-accent-500" />
-                <p className="text-body-2-semibold text-text-primary">Installé {c.t.toLowerCase()}</p>
-                <p className="mt-0.5 text-caption-1-medium text-text-secondary">{c.d}</p>
+              <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-5 transition-all duration-300 hover:-translate-y-1 hover:bg-white/10">
+                <span className="mb-3 flex size-11 items-center justify-center rounded-xl bg-companion-300/20 text-companion-300">
+                  <HugeIcon icon={c.icon} size="md" />
+                </span>
+                <p className="text-body-2-semibold text-white">Installé {c.t.toLowerCase()}</p>
+                <p className="mt-0.5 text-caption-1-medium text-white/60">{c.d}</p>
               </div>
             </Reveal>
           ))}
         </div>
         <Reveal delay={150} className="mx-auto mt-12 max-w-3xl text-center">
-          <p className="text-body-medium text-text-secondary">Vos documents, conversations et mémoires restent chez vous.</p>
-          <p className="mt-3 text-title-3-semibold text-text-primary">
+          <p className="text-body-medium text-white/70">Vos documents, conversations et mémoires restent chez vous.</p>
+          <p className="mt-3 text-title-3-semibold text-companion-300">
             KamaLoka fournit le logiciel. Vous gardez les données.
           </p>
-          <p className="mt-5 text-caption-1-medium text-text-tertiary">
+          <p className="mt-5 text-caption-1-medium text-white/50">
             IA locale disponible · Licence hors-ligne · Sauvegardes contrôlées · Aucun accès permanent requis par KamaLoka
           </p>
         </Reveal>
       </Section>
 
-      {/* 8 · ROI */}
-      <Section soft>
+      {/* 9 · ROI */}
+      <Section>
         <SectionHead
           eyebrow="ROI"
           title="Le prix d'un départ est souvent supérieur au prix de Companion."
@@ -517,18 +570,14 @@ export function LandingPage() {
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {[
-            { icon: TimeIcon, t: 'Temps perdu', d: 'à chercher ce que quelqu\'un savait.' },
-            { icon: AlertCircleIcon, t: 'Erreurs répétées', d: 'les mêmes pièges, redécouverts.' },
-            { icon: UserCircleIcon, t: 'Clients frustrés', d: 'qui repartent expliquer leur dossier.' },
-            { icon: RocketIcon, t: 'Onboarding plus long', d: 'des mois pour refaire ce qui existait.' },
-            { icon: HierarchyIcon, t: 'Projets ralentis', d: 'en attente d\'une réponse introuvable.' },
+            { icon: TimeIcon, tone: 'amber' as Tone, t: 'Temps perdu', d: "à chercher ce que quelqu'un savait." },
+            { icon: AlertCircleIcon, tone: 'rose' as Tone, t: 'Erreurs répétées', d: 'les mêmes pièges, redécouverts.' },
+            { icon: UserCircleIcon, tone: 'purple' as Tone, t: 'Clients frustrés', d: 'qui repartent expliquer leur dossier.' },
+            { icon: RocketIcon, tone: 'blue' as Tone, t: 'Onboarding plus long', d: 'des mois pour refaire ce qui existait.' },
+            { icon: HierarchyIcon, tone: 'cyan' as Tone, t: 'Projets ralentis', d: "en attente d'une réponse introuvable." },
           ].map((c, i) => (
             <Reveal key={c.t} delay={i * 90}>
-              <div className="h-full rounded-2xl border border-border-button-default bg-background-primary-default p-5 text-center shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                <HugeIcon icon={c.icon} size="lg" className="mx-auto text-amber-500" />
-                <p className="mt-3 text-body-2-semibold text-text-primary">{c.t}</p>
-                <p className="mt-1 text-caption-1-medium text-text-secondary">{c.d}</p>
-              </div>
+              <Card icon={c.icon} tone={c.tone} title={c.t}>{c.d}</Card>
             </Reveal>
           ))}
         </div>
@@ -539,38 +588,38 @@ export function LandingPage() {
         </Reveal>
       </Section>
 
-      {/* 9 · Tarifs */}
-      <Section id="tarifs">
+      {/* 10 · Tarifs */}
+      <Section soft id="tarifs">
         <SectionHead
           eyebrow="Tarifs"
           title="Choisissez comment vous voulez commencer."
-          sub="Chaque offre est une licence annuelle installée dans votre infrastructure. Aucun abonnement caché, aucune donnée qui sort."
+          sub="Chaque offre est une licence annuelle installée dans votre infrastructure. Aucun frais caché, aucune donnée qui sort."
         />
         <Pricing />
       </Section>
 
-      {/* 10 · Sécurité */}
-      <Section soft>
+      {/* 11 · Sécurité */}
+      <Section>
         <SectionHead
           eyebrow="Sécurité · Audit · Permissions"
           title={<>Conçu pour les exigences<br />des banques et des institutions.</>}
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Shield01Icon, t: 'Permissions par rôle', d: 'Chaque rôle ne voit que son périmètre — jusqu\'à la dernière réponse.' },
-            { icon: HistoryIcon, t: 'Journal d\'audit', d: 'Connexions, validations, actions d\'agents, exports : tout est tracé.' },
-            { icon: CloudUploadIcon, t: 'Sauvegardes', d: 'Export complet, restauration testée — vos données ne dépendent de personne.' },
-            { icon: Key02Icon, t: 'Aucune télémétrie', d: 'Rien ne remonte sans votre accord. La licence se vérifie hors-ligne.' },
+            { icon: Shield01Icon, tone: 'lime' as Tone, t: 'Permissions par rôle', d: "Chaque rôle ne voit que son périmètre — jusqu'à la dernière réponse." },
+            { icon: HistoryIcon, tone: 'blue' as Tone, t: "Journal d'audit", d: "Connexions, validations, actions d'agents, exports : tout est tracé." },
+            { icon: CloudUploadIcon, tone: 'purple' as Tone, t: 'Sauvegardes', d: 'Export complet, restauration testée — vos données ne dépendent de personne.' },
+            { icon: Key02Icon, tone: 'amber' as Tone, t: 'Aucune télémétrie', d: 'Rien ne remonte sans votre accord. La licence se vérifie hors-ligne.' },
           ].map((c, i) => (
             <Reveal key={c.t} delay={i * 90}>
-              <Card icon={c.icon} title={c.t}>{c.d}</Card>
+              <Card icon={c.icon} tone={c.tone} title={c.t}>{c.d}</Card>
             </Reveal>
           ))}
         </div>
       </Section>
 
-      {/* 11 · Pour les équipes techniques */}
-      <Section>
+      {/* 12 · Pour les équipes techniques */}
+      <Section soft>
         <SectionHead
           eyebrow="Pour les équipes techniques"
           title="La mémoire d'entreprise, accessible à vos outils."
@@ -578,12 +627,12 @@ export function LandingPage() {
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
           {[
-            { icon: BotIcon, t: 'Protocole standard', d: 'Vos assistants (Claude, Cursor, agents maison) se connectent au protocole MCP ouvert.' },
-            { icon: ApiIcon, t: 'API & webhooks', d: 'REST authentifié, webhooks signés : poussez des documents, recevez les événements.' },
-            { icon: ShieldKeyIcon, t: 'Accès contrôlés', d: 'Clients à portée limitée — scopes, outils autorisés, expiration, révocation immédiate.' },
+            { icon: BotIcon, tone: 'purple' as Tone, t: 'Protocole standard', d: 'Vos assistants (Claude, Cursor, agents maison) se connectent au protocole MCP ouvert.' },
+            { icon: ApiIcon, tone: 'blue' as Tone, t: 'API & webhooks', d: 'REST authentifié, webhooks signés : poussez des documents, recevez les événements.' },
+            { icon: ShieldKeyIcon, tone: 'lime' as Tone, t: 'Accès contrôlés', d: 'Clients à portée limitée — scopes, outils autorisés, expiration, révocation immédiate.' },
           ].map((c, i) => (
             <Reveal key={c.t} delay={i * 100}>
-              <Card icon={c.icon} title={c.t}>{c.d}</Card>
+              <Card icon={c.icon} tone={c.tone} title={c.t}>{c.d}</Card>
             </Reveal>
           ))}
         </div>
@@ -594,7 +643,7 @@ export function LandingPage() {
         </Reveal>
       </Section>
 
-      {/* 12 · CTA final */}
+      {/* 13 · CTA final */}
       <Section dark>
         <Reveal className="mx-auto max-w-3xl text-center">
           <div className="flex justify-center"><BrandMark size="lg" /></div>
