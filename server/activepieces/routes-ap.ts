@@ -20,13 +20,14 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
     res.json(health)
   })
 
-  /** Webhook : Activepieces pousse un fichier Drive (base64 ou URL) → ingestion. */
+  /** Webhook : Activepieces pousse un fichier Drive (Read File Content → POST structuré). */
   router.post('/webhooks/activepieces/file', async (req, res) => {
     if (!isActivepiecesEnabled()) {
       return res.status(403).json({ error: 'Activepieces non configuré' })
     }
-    const { fileName, content, mimeType, sourceName, employeeId } = req.body as {
-      fileName?: string; content?: string; mimeType?: string; sourceName?: string; employeeId?: string
+    const { fileName, content, mimeType, sourceName, employeeId, externalId, provider } = req.body as {
+      fileName?: string; content?: string; mimeType?: string; sourceName?: string
+      employeeId?: string; externalId?: string; provider?: string
     }
     if (!fileName || !content) {
       return res.status(400).json({ error: 'fileName et content requis' })
@@ -51,9 +52,11 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
 
     const ext = (fileName.slice(fileName.lastIndexOf('.')) || '.txt').toLowerCase()
     const mime = ext.replace('.', '')
+    const extId = externalId ? `'${externalId.replace(/'/g, "''")}'` : 'NULL'
+    const extProvider = provider ? `'${provider.replace(/'/g, "''")}'` : 'NULL'
     const docRows = await dbh.query<{ id: string }>(
-      `INSERT INTO documents (organization_id, source_id, title, mime_type, size_bytes, storage_path, status)
-       VALUES ('${orgId}', '${sourceId}', '${fileName.replace(/'/g, "''")}', '${mime}', ${Buffer.byteLength(content)}, '${filePath.replace(/\\/g, '\\\\')}', 'queued')
+      `INSERT INTO documents (organization_id, source_id, title, mime_type, size_bytes, storage_path, status, external_id, external_provider)
+       VALUES ('${orgId}', '${sourceId}', '${fileName.replace(/'/g, "''")}', '${mime}', ${Buffer.byteLength(content)}, '${filePath.replace(/\\/g, '\\\\')}', 'queued', ${extId}, ${extProvider})
        RETURNING id`,
     )
     const doc = docRows[0]
