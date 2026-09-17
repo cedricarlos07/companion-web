@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { ButtonLink } from '@/components/base/buttons/button'
 import { Chip } from '@/components/base/badges/chip'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
@@ -36,12 +35,12 @@ function Header() {
   return (
     <header className="sticky top-0 z-10 border-b border-separator-border bg-background-primary-default/95 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
-        <Link to="/" className="flex items-center gap-2.5 no-underline">
+        <a href="/" className="flex items-center gap-2.5 no-underline">
           <BrandMark />
           <span className="text-headline-semibold text-text-primary">
             COMPANION <span className="text-text-tertiary">· by KamaLoka</span>
           </span>
-        </Link>
+        </a>
         <div className="ml-4 hidden items-center gap-5 lg:flex">
           {links.map(([href, label]) => (
             <a key={href} href={href} className="text-body-2-medium text-text-secondary no-underline hover:text-text-primary">
