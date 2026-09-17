@@ -201,6 +201,42 @@ export function buildAdminApi(dbh: DbHandle): Router {
     res.json({ ok: true })
   })
 
+  /* ------------------------------- Releases -------------------------------- */
+
+  router.post('/releases', async (req, res) => {
+    const { version, channel = 'stable', notes = '', minimumVersion = '0.0.0' } = req.body as Record<string, string>
+    if (!version) return res.status(400).json({ error: 'version requise (ex. 1.0.2)' })
+    await dbh.exec(
+      `INSERT INTO releases (version, channel, notes, minimum_version)
+       VALUES ('${version.replace(/'/g, "''")}', '${channel.replace(/'/g, "''")}', '${notes.replace(/'/g, "''")}', '${(minimumVersion ?? '0.0.0').replace(/'/g, "''")}')`,
+    )
+    res.json({ ok: true, version })
+  })
+
+  router.get('/releases', async (_req, res) => {
+    const rows = await dbh.query(
+      `SELECT version, channel, notes, minimum_version, published_at::text AS published_at FROM releases ORDER BY published_at DESC`,
+    )
+    res.json({ releases: rows })
+  })
+
+  /* ----------------------------- Portal users ------------------------------ */
+
+  router.post('/portal-users', async (req, res) => {
+    const { customerId, email, password, displayName } = req.body as Record<string, string>
+    if (!customerId || !email || !password || password.length < 8) {
+      return res.status(400).json({ error: 'customerId, email et password (8+) requis' })
+    }
+    const { hashPassword } = await import('./portal.js')
+    const rows = await dbh.query<{ id: string }>(
+      `INSERT INTO portal_users (customer_id, email, password_hash, display_name)
+       VALUES ('${customerId}', '${email.replace(/'/g, "''")}', '${hashPassword(password).replace(/'/g, "''")}', '${(displayName ?? '').replace(/'/g, "''")}')
+       RETURNING id`,
+    ).catch(() => [])
+    if (!rows[0]) return res.status(409).json({ error: 'email déjà utilisé ou client inconnu' })
+    res.json({ portalUserId: rows[0].id })
+  })
+
   /* ------------------------------ Dashboard -------------------------------- */
 
   /** Arrêt propre (flush PGlite avant exit) — admin uniquement. */

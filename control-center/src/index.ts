@@ -1,8 +1,11 @@
 import express from 'express'
+import path from 'node:path'
 import { getDb } from './db.js'
 import { buildLicenseApi } from './license-api.js'
-import { buildAdminApi } from './admin.js'
+import { buildAdminApi, adminAuthorized } from './admin.js'
 import { buildUi } from './ui.js'
+import { buildPortal } from './portal.js'
+import fs from 'node:fs'
 
 /**
  * KAMALOKA CONTROL CENTER — le côté éditeur.
@@ -28,9 +31,29 @@ async function main() {
 
   // Le control plane des licences (Companion → Kamaloka).
   app.use(buildLicenseApi(dbh))
+
+  // Dernière release publique — interrogé par les instances Companion.
+  app.get('/releases/latest', async (_req, res) => {
+    const latest = (
+      await dbh.query<{ version: string; channel: string; minimum_version: string }>(
+        `SELECT version, channel, minimum_version FROM releases WHERE channel = 'stable' ORDER BY published_at DESC LIMIT 1`,
+      )
+    )[0]
+    if (!latest) return res.status(404).json({ error: 'aucune release publiée' })
+    res.json({ version: latest.version, channel: latest.channel, minimumVersion: latest.minimum_version })
+  })
+
   // API admin (x-admin-key).
   app.use('/admin', buildAdminApi(dbh))
-  // UI interne (cookie cc_admin).
+  // Portail client (session cookie).
+  app.use(buildPortal(dbh))
+  // Documentation statique (docs.companion.kamaloka.ai) et landing
+  // (companion.kamaloka.ai) — montées AVANT l'UI admin interne.
+  const docsDir = path.resolve('../website/docs')
+  if (fs.existsSync(docsDir)) app.use('/docs', express.static(docsDir))
+  const landingDir = path.resolve('../website/landing')
+  if (fs.existsSync(landingDir)) app.use('/landing', express.static(landingDir))
+  // UI interne (cookie cc_admin) en dernier.
   app.use(buildUi(dbh))
 
   app.listen(PORT, () => {

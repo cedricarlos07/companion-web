@@ -56,3 +56,23 @@ CREATE TABLE IF NOT EXISTS payments (
   method text NOT NULL DEFAULT 'virement',
   paid_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Accès portail client (portal.companion.kamaloka.ai)
+CREATE TABLE IF NOT EXISTS portal_users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid NOT NULL REFERENCES customers(id),
+  email text NOT NULL UNIQUE,
+  password_hash text NOT NULL,
+  display_name text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Releases Companion distribuées via le portail
+CREATE TABLE IF NOT EXISTS releases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  version text NOT NULL UNIQUE,
+  channel text NOT NULL DEFAULT 'stable',
+  notes text NOT NULL DEFAULT '',
+  minimum_version text NOT NULL DEFAULT '0.0.0',
+  published_at timestamptz NOT NULL DEFAULT now()
+);

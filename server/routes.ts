@@ -682,6 +682,26 @@ export function buildApiRouter(dbh: DbHandle): Router {
     res.json({ engine: memorySearchEngine(), provider: providerHealth, ai })
   })
 
+  /* Vérification de mise à jour — informatif uniquement, jamais appliquée automatiquement. */
+  api.get('/system/update-check', authRequired(dbh), async (_req, res) => {
+    const updateServer = (process.env.LICENSE_SERVER_URL ?? process.env.UPDATE_SERVER_URL ?? '').replace(/\/$/, '')
+    if (!updateServer) return res.json({ available: false, reason: 'aucun serveur de mise à jour configuré' })
+    try {
+      const r = await fetch(`${updateServer}/releases/latest`, { signal: AbortSignal.timeout(5000) })
+      if (!r.ok) return res.json({ available: false, reason: `réponse ${r.status}` })
+      const data = (await r.json()) as { version?: string; channel?: string }
+      const installed = '1.0.0'
+      res.json({
+        available: Boolean(data.version && data.version !== installed),
+        installed,
+        latest: data.version ?? null,
+        channel: data.channel ?? 'stable',
+      })
+    } catch (err) {
+      res.json({ available: false, reason: String(err).slice(0, 120) })
+    }
+  })
+
   api.get('/system/ai/settings', authRequired(dbh), async (req, res) => {
     const { getAiSettings } = await import('./ai-settings.js')
     res.json({ settings: await getAiSettings(dbh, req.user!.organizationId) })

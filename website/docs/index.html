@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentation Companion — KamaLoka</title>
+<meta name="description" content="Documentation Companion : installation, utilisation, agents, intégrations, administration, développeurs, dépannage.">
+<style>
+:root{--ink:#101828;--body:#344054;--muted:#667085;--line:#e4e7ec;--bg:#fff;--soft:#f6f7f9;--brand:#1849a9;--brand-soft:#eff6ff;--ok:#067647;--ok-bg:#ecfdf3;--warn:#b54708;--warn-bg:#fffaeb}
+*{box-sizing:border-box}
+body{font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--body);margin:0;background:var(--bg)}
+header{position:sticky;top:0;z-index:9;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:20px;padding:12px 20px}
+.logo{font-weight:800;color:var(--ink);text-decoration:none;font-size:16px}
+.logo span{color:var(--brand)}
+.bar a.toplink{color:var(--body);text-decoration:none;font-size:14px}
+.bar a.toplink:hover{color:var(--ink)}
+.spacer{flex:1}
+.layout{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:280px 1fr;gap:0;min-height:calc(100vh - 58px)}
+.sidebar{border-right:1px solid var(--line);padding:26px 18px 60px;position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto}
+.group{font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:22px 0 8px}
+.group:first-child{margin-top:0}
+.sidebar a{display:block;color:var(--body);text-decoration:none;font-size:14px;padding:6px 10px;border-radius:8px}
+.sidebar a:hover{background:var(--soft);color:var(--ink)}
+.sidebar a.active{background:var(--brand-soft);color:var(--brand);font-weight:600}
+main{padding:40px 44px 100px;max-width:840px}
+h1{font-size:30px;letter-spacing:-.6px;color:var(--ink);margin:0 0 8px}
+.kicker{font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--brand);margin-bottom:10px;display:block}
+h2{font-size:20px;color:var(--ink);margin:34px 0 8px}
+p,li{font-size:15px}
+code{background:#eef2f6;border-radius:6px;padding:2px 7px;font-size:13px;color:var(--ink)}
+pre{background:#101828;color:#d1e9ff;border-radius:12px;padding:16px 18px;overflow:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;padding:0;color:inherit}
+.note{border-radius:12px;padding:13px 16px;font-size:14px;margin:16px 0}
+.note.ok{background:var(--ok-bg);color:var(--ok)}
+.note.warn{background:var(--warn-bg);color:var(--warn)}
+.note.info{background:var(--brand-soft);color:var(--brand)}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{background:var(--soft);color:var(--ink)}
+.doc{display:none}
+.doc.active{display:block}
+.prevnext{display:flex;justify-content:space-between;margin-top:56px;padding-top:18px;border-top:1px solid var(--line)}
+.prevnext a{color:var(--brand);text-decoration:none;font-weight:600;font-size:14px}
+footer{border-top:1px solid var(--line);padding:22px 20px;font-size:13px;color:var(--muted);text-align:center}
+@media (max-width:900px){.layout{grid-template-columns:1fr}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}main{padding:28px 20px 80px}}
+</style>
+</head>
+<body>
+
+<header><div class="bar">
+  <a class="logo" href="/">COMPANION <span>· docs</span></a>
+  <a class="toplink" href="/">Site produit</a>
+  <a class="toplink" href="https://portal.companion.kamaloka.ai">Portail client</a>
+  <span class="spacer"></span>
+  <a class="toplink" href="#depannage">Dépannage</a>
+</div></header>
+
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <div class="group">Commencer</div>
+  <a href="#qu-est-ce-que-companion">Qu'est-ce que Companion ?</a>
+  <a href="#installation">Installer en 10 minutes</a>
+  <a href="#premier-demarrage">Premier démarrage</a>
+  <a href="#configurer-organisation">Configurer votre organisation</a>
+  <a href="#premiere-source">Connecter votre première source</a>
+
+  <div class="group">Utiliser Companion</div>
+  <a href="#company-brain">Company Brain</a>
+  <a href="#employee-memory">Employee Memory</a>
+  <a href="#role-brain">Role Brain</a>
+  <a href="#ask-companion">Ask Companion</a>
+  <a href="#knowledge-risk">Knowledge Risk</a>
+  <a href="#handover">Handover</a>
+  <a href="#onboarding">Onboarding</a>
+
+  <div class="group">Agents</div>
+  <a href="#comprendre-agents">Comprendre les agents</a>
+  <a href="#niveaux-autonomie">Niveaux d'autonomie</a>
+  <a href="#approvals">Approvals</a>
+  <a href="#automations">Automations</a>
+  <a href="#activity-audit">Activity / Audit</a>
+
+  <div class="group">Intégrations</div>
+  <a href="#google-workspace">Google Workspace</a>
+  <a href="#microsoft-365">Microsoft 365</a>
+  <a href="#whatsapp-business">WhatsApp Business</a>
+  <a href="#odoo">Odoo</a>
+  <a href="#slack">Slack</a>
+  <a href="#notion">Notion</a>
+  <a href="#api-personnalisee">API personnalisée</a>
+
+  <div class="group">Administration</div>
+  <a href="#utilisateurs">Utilisateurs</a>
+  <a href="#roles">Rôles</a>
+  <a href="#permissions">Permissions</a>
+  <a href="#licences">Licences</a>
+  <a href="#facturation">Facturation</a>
+  <a href="#sauvegardes">Sauvegardes</a>
+  <a href="#restaurer">Restaurer Companion</a>
+  <a href="#mises-a-jour">Mises à jour</a>
+  <a href="#securite">Sécurité</a>
+
+  <div class="group">Développeurs</div>
+  <a href="#mcp-server">MCP Server</a>
+  <a href="#api">API</a>
+  <a href="#authentication">Authentication</a>
+  <a href="#webhooks">Webhooks</a>
+  <a href="#exemples">Exemples</a>
+
+  <div class="group">Dépannage</div>
+  <a href="#diagnostic">Diagnostic</a>
+  <a href="#mem0-degraded">Mem0 degraded</a>
+  <a href="#activepieces-offline">Activepieces offline</a>
+  <a href="#postgresql">PostgreSQL</a>
+  <a href="#redis">Redis</a>
+  <a href="#logs">Logs</a>
+</nav>
+
+<main id="main">
+
+<!-- ══════════════════════ COMMENCER ══════════════════════ -->
+
+<section class="doc" id="qu-est-ce-que-companion">
+  <span class="kicker">Commencer</span>
+  <h1>Qu'est-ce que Companion ?</h1>
+  <p>Companion est la <b>mémoire opérationnelle de votre entreprise</b>, installée dans votre infrastructure.
+  Il capture le savoir de vos équipes (documents, échanges, entretiens de transmission), l'organise en
+  connaissances vérifiées et sourcées, mesure le risque de perte de savoir, assiste les transmissions de poste
+  et accélère les onboardings — le tout accessible à vos collaborateurs <i>et</i> à vos agents IA, avec permissions et audit.</p>
+  <h2>Les concepts en 60 secondes</h2>
+  <table>
+    <tr><th>Concept</th><th>Rôle</th></tr>
+    <tr><td><b>Company Brain</b></td><td>Le socle de connaissances validées de l'entreprise</td></tr>
+    <tr><td><b>Employee Memory</b></td><td>Ce que chaque collaborateur sait — avec provenance</td></tr>
+    <tr><td><b>Role Brain</b></td><td>Le savoir du poste, validé et transmissible</td></tr>
+    <tr><td><b>Knowledge Risk</b></td><td>Le score de risque de perte de savoir</td></tr>
+    <tr><td><b>Handover</b></td><td>Le dossier de transmission de poste</td></tr>
+    <tr><td><b>Onboarding</b></td><td>Le plan J1 / J7 / J30 du nouvel arrivant</td></tr>
+  </table>
+  <div class="note ok">Companion est <b>self-hosted</b> : vos données restent chez vous. Seule la licence est fournie par KamaLoka.</div>
+  <p>Suivant : <a href="#installation">Installer Companion en 10 minutes</a>.</p>
+  <div class="prevnext"><span></span><a href="#installation">Suivant · Installer en 10 minutes →</a></div>
+</section>
+
+<section class="doc" id="installation">
+  <span class="kicker">Commencer</span>
+  <h1>Installer Companion en 10 minutes</h1>
+  <p>Une machine, quatre commandes. Tout le reste est automatisé.</p>
+
+  <h2>1. Pré-requis</h2>
+  <table>
+    <tr><th>Élément</th><th>Minimum</th></tr>
+    <tr><td>Serveur</td><td>Ubuntu 24.04+ (VPS, cloud privé ou interne)</td></tr>
+    <tr><td>CPU / RAM</td><td>4 CPU · 8 Go RAM</td></tr>
+    <tr><td>Disque</td><td>50 Go SSD</td></tr>
+    <tr><td>Logiciel</td><td>Docker + Docker Compose v2</td></tr>
+    <tr><td>Réseau</td><td>Un nom de domaine pointant vers le serveur</td></tr>
+  </table>
+
+  <h2>2. Installation</h2>
+  <p>Récupérez le kit d'installation depuis votre <a href="https://portal.companion.kamaloka.ai">portail client</a>, puis :</p>
+  <pre><code>unzip companion-kit.zip && cd companion-kit
+sudo ./install.sh</code></pre>
+  <p>Le script vérifie les pré-requis, génère vos secrets, démarre la stack complète
+  (base de données, cache, intégrations, application) et enregistre votre licence.</p>
+  <div class="note info">La licence <code>companion-license.lic</code> reçue de KamaLoka peut être passée au script
+  (<code>COMPANION_LICENSE_FILE=… ./install.sh</code>) ou collée à la demande.</div>
+
+  <h2>3. Ouvrir</h2>
+  <pre><code>https://companion.votreentreprise.com</code></pre>
+
+  <h2>4. Importer votre licence</h2>
+  <p>Connectez-vous avec le compte administrateur créé à l'installation, puis
+  <b>Paramètres → Facturation → Importer une licence</b> : collez le contenu du fichier <code>.lic</code>.
+  Votre plan est activé immédiatement, hors-ligne.</p>
+
+  <h2>5. Créer l'organisation</h2>
+  <p>L'assistant de premier démarrage vous demande le nom de l'entreprise, le secteur,
+  le compte administrateur, et invite vos premiers collaborateurs.</p>
+
+  <h2>6. Connecter Google Drive / Microsoft 365</h2>
+  <p><b>Sources → Connecter</b> : choisissez votre espace, autorisez l'accès OAuth —
+  l'ingestion démarre aussitôt (extraction, découpage, indexation, tout est sourcé).</p>
+
+  <div class="note ok"><b>Terminé.</b> Posez votre première question dans « Ask Companion » avec la citation de sa source.</div>
+  <div class="prevnext"><a href="#qu-est-ce-que-companion">← Qu'est-ce que Companion ?</a><a href="#premier-demarrage">Suivant · Premier démarrage →</a></div>
+</section>
+
+<section class="doc" id="premier-demarrage">
+  <span class="kicker">Commencer</span>
+  <h1>Premier démarrage</h1>
+  <p>Après l'installation, l'assistant <b>/setup</b> crée votre organisation en 5 étapes :</p>
+  <ol>
+    <li><b>Organisation</b> — nom, secteur, pays, taille, langue, compte administrateur.</li>
+    <li><b>Intelligence</b> — modèle d'analyse local (par défaut, aucune donnée n'en sort) ou fournisseur externe avec votre clé API.</li>
+    <li><b>Sources</b> — fichiers locaux, Drive, Gmail, Microsoft 365, Notion, Slack…</li>
+    <li><b>Équipe</b> — invitations des collaborateurs (elles partent par email avec un lien d'activation).</li>
+    <li><b>Terminé</b> — session ouverte directement.</li>
+  </ol>
+  <h2>Les 3 premières actions recommandées</h2>
+  <ol>
+    <li>Importez 5 à 10 documents représentatifs (procédures, comptes-rendus) dans <b>Sources</b>.</li>
+    <li>Posez une question métier dans <b>Ask Companion</b> et vérifiez la citation de la source.</li>
+    <li>Ouvrez <b>Knowledge Risk</b> : le score initial de votre organisation est calculé.</li>
+  </ol>
+  <div class="prevnext"><a href="#installation">← Installer en 10 minutes</a><a href="#configurer-organisation">Suivant · Configurer votre organisation →</a></div>
+</section>
+
+<section class="doc" id="configurer-organisation">
+  <span class="kicker">Commencer</span>
+  <h1>Configurer votre organisation</h1>
+  <h2>Paramètres → Organisation</h2>
+  <p>Nom, secteur, pays — utilisés pour contextualiser les réponses et le vocabulaire métier.</p>
+  <h2>Paramètres → Fournisseurs IA</h2>
+  <p>Par défaut, Companion utilise un modèle exécuté <b>sur votre serveur</b> : aucune donnée ne sort de votre infrastructure.
+  Vous pouvez brancher un fournisseur externe (OpenAI, Anthropic, Gemini, endpoint compatible) avec votre propre clé — BYOK.</p>
+  <h2>Paramètres → Mémoire</h2>
+  <p>Moteur de recherche mémoire : <code>hybrid</code> (recommandé), <code>native</code> ou <code>mem0</code>.
+  L'état du moteur mémoire est affiché en direct (opérationnel / dégradé).</p>
+  <h2>Paramètres → Apparence & Notifications</h2>
+  <p>Thème clair/sombre, notifications internes. Le branding personnalisé est disponible en plan Enterprise.</p>
+  <div class="prevnext"><a href="#premier-demarrage">← Premier démarrage</a><a href="#premiere-source">Suivant · Connecter votre première source →</a></div>
+</section>
+
+<section class="doc" id="premiere-source">
+  <span class="kicker">Commencer</span>
+  <h1>Connecter votre première source</h1>
+  <ol>
+    <li><b>Sources → Nouvelle source</b>.</li>
+    <li>Choisissez <b>Fichiers locaux</b> pour démarrer (PDF, DOCX, TXT, MD, CSV) — glissez-déposez vos documents.</li>
+    <li>Laissez l'ingestion se terminer : extraction → normalisation → découpage → indexation. Chaque fragment garde sa source.</li>
+  </ol>
+  <h2>Qualité d'ingestion : ce qu'il faut savoir</h2>
+  <ul>
+    <li>Les documents importés produisent des <b>candidats</b> : ils deviennent « validés » après relecture humaine.</li>
+    <li>Le doublon détecté n'est pas créé deux fois ; une contradiction est signalée plutôt qu'écrasée.</li>
+    <li>Les sources connectées (Drive, Gmail…) s'ingèrent en continu, sans intervention.</li>
+  </ul>
+  <div class="note info">Astuce : commencez petit — 10 documents qui font vraiment autorité valent mieux que 1 000 documents en vrac.</div>
+  <div class="prevnext"><a href="#configurer-organisation">← Configurer votre organisation</a><a href="#company-brain">Suivant · Company Brain →</a></div>
+</section>
+
+<!-- ══════════════════════ UTILISER ══════════════════════ -->
+
+<section class="doc" id="company-brain">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Company Brain</h1>
+  <p>Le Company Brain est le socle de connaissances partagées de l'entreprise : procédures, décisions, faits métier.
+  Chaque connaissance y porte sa <b>provenance</b> (document d'origine, auteur), son <b>statut</b>
+  (candidat, validé, contesté, obsolète) et son historique de versions.</p>
+  <h2>Statuts de connaissance</h2>
+  <table>
+    <tr><th>Statut</th><th>Signification</th></tr>
+    <tr><td><code>candidate</code></td><td>Détectée ou importée, en attente de validation humaine</td></tr>
+    <tr><td><code>verified</code></td><td>Validée par un porteur du savoir — citée avec confiance « Validé »</td></tr>
+    <tr><td><code>contested</code></td><td>Contradiction signalée — à arbitrer</td></tr>
+    <tr><td><code>deprecated</code></td><td>Obsolète, conservée pour l'historique</td></tr>
+  </table>
+  <p>Les candidats ne deviennent jamais « validées » automatiquement : une main humaine tranche.
+  C'est ce qui rend les réponses de Companion fiables.</p>
+  <div class="prevnext"><a href="#premiere-source">← Connecter votre première source</a><a href="#employee-memory">Suivant · Employee Memory →</a></div>
+</section>
+
+<section class="doc" id="employee-memory">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Employee Memory</h1>
+  <p>Chaque collaborateur dispose d'une mémoire individuelle : ce qu'il sait, ce qu'il a fait, ce qu'il a documenté.
+  Elle s'enrichit de trois façons :</p>
+  <ul>
+    <li><b>Documents</b> — ce qu'il écrit (procédures, comptes-rendus) est rattaché à sa mémoire ;</li>
+    <li><b>Entretiens de transmission</b> — les réponses aux questions de handover deviennent des candidats de sa mémoire ;</li>
+    <li><b>Corrections</b> — toute correction apportée à une réponse est capturée, pas perdue.</li>
+  </ul>
+  <div class="note info">La mémoire d'un employé n'est visible que selon les permissions de chacun — voir <a href="#permissions">Permissions</a>.</div>
+  <div class="prevnext"><a href="#company-brain">← Company Brain</a><a href="#role-brain">Suivant · Role Brain →</a></div>
+</section>
+
+<section class="doc" id="role-brain">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Role Brain</h1>
+  <p>Le Role Brain contient le savoir <b>du poste</b>, pas de la personne : les procédures et connaissances
+  qu'un titulaire du rôle doit maîtriser, validées et structurées.</p>
+  <h2>Pourquoi c'est central</h2>
+  <ul>
+    <li>Un <b>handover</b> s'appuie sur le Role Brain pour mesurer ce qui manque ;</li>
+    <li>Un <b>onboarding</b> est construit depuis le Role Brain du poste d'arrivée ;</li>
+    <li>Les <b>agents</b> s'appuient sur le contexte du rôle pour agir correctement.</li>
+  </ul>
+  <h2>Alimenter un Role Brain</h2>
+  <p>Depuis une connaissance validée de la mémoire d'un employé : <b>Promouvoir vers un rôle</b>.
+  La connaissance reste chez l'individu (avec sa provenance) et une copie validée rejoint le rôle.</p>
+  <div class="prevnext"><a href="#employee-memory">← Employee Memory</a><a href="#ask-companion">Suivant · Ask Companion →</a></div>
+</section>
+
+<section class="doc" id="ask-companion">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Ask Companion</h1>
+  <p>Posez votre question en français naturel. Companion cherche dans la mémoire (moteur hybride),
+  applique vos permissions, puis répond <b>avec citations</b> : document source, propriétaire, niveau de validation.</p>
+  <h2>Les engagements</h2>
+  <ul>
+    <li><b>Citation systématique</b> — chaque affirmation pointe vers sa source ;</li>
+    <li><b>Abstention honnête</b> — si le contexte ne suffit pas, Companion dit « je ne sais pas » plutôt que d'inventer ;</li>
+    <li><b>Filtres</b> — restreindre à un rôle, un département, un employé ou un type de connaissance ;</li>
+    <li><b>Moteurs</b> — hybride (défaut), natif ou Mem0, comparables à tout instant.</li>
+  </ul>
+  <h2>Questions bien posées</h2>
+  <pre><code>« Comment traite-t-on un rejet R03 supérieur à 500 000 FCFA ? »
+« Quelles sont les étapes de validation d'un appel d'offres ? »
+« Quelle est la procédure d'escalade fournisseur du poste de comptable ? »</code></pre>
+  <div class="prevnext"><a href="#role-brain">← Role Brain</a><a href="#knowledge-risk">Suivant · Knowledge Risk →</a></div>
+</section>
+
+<section class="doc" id="knowledge-risk">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Knowledge Risk</h1>
+  <p>Un score global (0–100) et cinq facteurs détaillés qui mesurent le risque que votre entreprise
+  <b>perde du savoir</b> :</p>
+  <table>
+    <tr><th>Facteur</th><th>Question posée</th></tr>
+    <tr><td>Dépendance aux personnes clés</td><td>Quel savoir n'existe que dans une seule tête ?</td></tr>
+    <tr><td>Couverture des rôles</td><td>Quels postes n'ont pas de savoir validé ?</td></tr>
+    <tr><td>Fraîcheur</td><td>Quand les connaissances clés ont-elles été confirmées ?</td></tr>
+    <tr><td>Diversité des sources</td><td>Le savoir repose-t-il sur plusieurs canaux ?</td></tr>
+    <tr><td>Préparation des handovers</td><td>Les transmissions sont-elles prêtes ?</td></tr>
+  </table>
+  <p>Chaque facteur pointe vers les employés, rôles et documents concernés : le score devient un <b>plan d'action</b>,
+  pas juste un chiffre. Le suivi dans le temps se fait via l'API et le journal d'audit.</p>
+  <div class="prevnext"><a href="#ask-companion">← Ask Companion</a><a href="#handover">Suivant · Handover →</a></div>
+</section>
+
+<section class="doc" id="handover">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Handover — transmission de poste</h1>
+  <h2>Le flux</h2>
+  <ol>
+    <li><b>Analyser</b> — Companion compare la mémoire de l'employé partant au Role Brain de son poste ;</li>
+    <li><b>Détecter les manques</b> — ce que lui seul sait apparaît explicitement ;</li>
+    <li><b>Questionner</b> — un entretien ciblé lui pose les questions qui comblent les manques ;</li>
+    <li><b>Valider</b> — chaque réponse devient une connaissance candidate, relue puis validée ;</li>
+    <li><b>Transmettre</b> — le <b>pack de handover</b> est généré : version humaine lisible + version machine pour les agents.</li>
+  </ol>
+  <h2>Successeur & readiness</h2>
+  <p>Désignez un successeur : son <b>onboarding</b> peut être généré automatiquement depuis le handover,
+  avec un score de préparation (readiness) qui progresse à mesure que les manques sont comblés.</p>
+  <div class="note warn">Un handover se lance idéalement <b>3 à 6 semaines</b> avant le départ — assez tôt pour l'entretien, assez tard pour que le savoir soit à jour.</div>
+  <div class="prevnext"><a href="#knowledge-risk">← Knowledge Risk</a><a href="#onboarding">Suivant · Onboarding →</a></div>
+</section>
+
+<section class="doc" id="onboarding">
+  <span class="kicker">Utiliser Companion</span>
+  <h1>Onboarding</h1>
+  <p>Générez un plan d'arrivée structuré en trois phases :</p>
+  <table>
+    <tr><th>Phase</th><th>Contenu</th></tr>
+    <tr><td><b>J1</b></td><td>Ce qu'il faut savoir dès le premier jour : contexte, outils, contacts, procédures critiques</td></tr>
+    <tr><td><b>J7</b></td><td>Ce qu'il faut maîtriser la première semaine : processus du poste, cas particuliers</td></tr>
+    <tr><td><b>J30</b></td><td>Ce qui fait l'autonomie : exceptions, relations, historique des décisions</td></tr>
+  </table>
+  <p>Le plan est construit depuis le <b>Role Brain</b> du poste, le <b>handover</b> du prédécesseur (s'il existe),
+  le Company Brain et les projets en cours. Un score de <b>readiness</b> suit la progression.</p>
+  <div class="prevnext"><a href="#handover">← Handover</a><a href="#comprendre-agents">Suivant · Comprendre les agents →</a></div>
+</section>
+
+<!-- ══════════════════════ AGENTS ══════════════════════ -->
+
+<section class="doc" id="comprendre-agents">
+  <span class="kicker">Agents</span>
+  <h1>Comprendre les agents</h1>
+  <p>Companion embarque quatre agents spécialisés, alimentés par la même mémoire et soumis aux mêmes permissions :</p>
+  <table>
+    <tr><th>Agent</th><th>Mission</th></tr>
+    <tr><td><b>Knowledge Agent</b></td><td>Détecte les contradictions, propose des corrections sourcées</td></tr>
+    <tr><td><b>Handover Copilot</b></td><td>Analyse les manques, prépare les entretiens et les packs</td></tr>
+    <tr><td><b>Onboarding Copilot</b></td><td>Construit les plans J1 / J7 / J30</td></tr>
+    <tr><td><b>Company Assistant</b></td><td>Répond aux questions avec citations, prépare les brouillons</td></tr>
+  </table>
+  <p>Chaque exécution (run) est persistée : plan suivi, étapes, outils appelés, décisions de politique,
+  tokens consommés, coût estimé, score de vérification. Rien n'est une boîte noire.</p>
+  <div class="prevnext"><a href="#onboarding">← Onboarding</a><a href="#niveaux-autonomie">Suivant · Niveaux d'autonomie →</a></div>
+</section>
+
+<section class="doc" id="niveaux-autonomie">
+  <span class="kicker">Agents</span>
+  <h1>Niveaux d'autonomie</h1>
+  <table>
+    <tr><th>Niveau</th><th>Comportement</th></tr>
+    <tr><td><b>Assistant</b></td><td>Propose, l'humain exécute</td></tr>
+    <tr><td><b>Copilot</b></td><td>Prépare et exécute les actions internes ; actions sensibles soumises à approbation</td></tr>
+    <tr><td><b>Autonome</b></td><td>Réservé, par agent et par outil, aux actions à risque nul</td></tr>
+  </table>
+  <div class="note info">Par défaut, tout agent est en <b>copilot</b> : il ne peut pas envoyer un email ou agir à l'extérieur sans approbation humaine.</div>
+  <div class="prevnext"><a href="#comprendre-agents">← Comprendre les agents</a><a href="#approvals">Suivant · Approvals →</a></div>
+</section>
+
+<section class="doc" id="approvals">
+  <span class="kicker">Agents</span>
+  <h1>Approvals</h1>
+  <p>Avant toute action sensible (envoi d'email, écriture externe), l'agent <b>suspend</b> son travail
+  et soumet une demande d'approbation : action prévue, aperçu du contenu, sources utilisées, raison.</p>
+  <ul>
+    <li><b>Approuver</b> → le workflow reprend exactement où il s'était arrêté ;</li>
+    <li><b>Rejeter</b> → le run se termine proprement, avec l'état « rejeté » journalisé ;</li>
+    <li>Les décisions sont attribuées (qui, quand) et conservées dans l'audit.</li>
+  </ul>
+  <p>Les demandes en attente apparaissent dans <b>Approvals</b> et dans la cloche de notifications.</p>
+  <div class="prevnext"><a href="#niveaux-autonomie">← Niveaux d'autonomie</a><a href="#automations">Suivant · Automations →</a></div>
+</section>
+
+<section class="doc" id="automations">
+  <span class="kicker">Agents</span>
+  <h1>Automations & triggers</h1>
+  <p>Des événements déclenchent les agents, avec rate limiting :</p>
+  <table>
+    <tr><th>Déclencheur</th><th>Effet</th></tr>
+    <tr><td><code>employee.leaving</code></td><td>Ouvre un handover assisté</td></tr>
+    <tr><td><code>employee.created</code></td><td>Prépare un onboarding</td></tr>
+    <tr><td><code>memory.contradicted</code></td><td>Le Knowledge Agent examine la contradiction</td></tr>
+    <tr><td><code>knowledge_risk.high</code></td><td>Alerte et recommandations</td></tr>
+    <tr><td><code>source.ingested</code></td><td>Traitement des nouveaux documents</td></tr>
+  </table>
+  <p>Chaque déclencheur peut être activé/coupé individuellement depuis <b>Automations</b>.</p>
+  <div class="prevnext"><a href="#approvals">← Approvals</a><a href="#activity-audit">Suivant · Activity / Audit →</a></div>
+</section>
+
+<section class="doc" id="activity-audit">
+  <span class="kicker">Agents</span>
+  <h1>Activity / Audit</h1>
+  <p><b>Activity</b> montre l'activité des agents (runs, étapes, outils). Le <b>journal d'audit</b> — plus large —
+  enregistre toutes les actions sensibles de la plateforme :</p>
+  <ul>
+    <li>connexions, changements de rôle, invitations ;</li>
+    <li>validations, corrections, promotions de connaissances ;</li>
+    <li>décisions de politique des agents (autorisé / refusé, et pourquoi) ;</li>
+    <li>imports de licence, backups, actions MCP.</li>
+  </ul>
+  <div class="note ok">L'audit est votre preuve de contrôle : qui a fait quoi, quand, avec quelles sources.</div>
+  <div class="prevnext"><a href="#automations">← Automations</a><a href="#google-workspace">Suivant · Google Workspace →</a></div>
+</section>
+
+<!-- ══════════════════════ INTÉGRATIONS ══════════════════════ -->
+
+<section class="doc" id="google-workspace">
+  <span class="kicker">Intégrations</span>
+  <h1>Google Workspace</h1>
+  <ol>
+    <li><b>Sources → Connecter → Google Drive</b> — l'autorisation OAuth s'ouvre ;</li>
+    <li>Choisissez les dossiers à surveiller ;</li>
+    <li>L'ingestion continue démarre : nouveaux fichiers et mises à jour deviennent des connaissances sourcées.</li>
+  </ol>
+  <p><b>Gmail</b> s'active de la même façon : les échanges décisionnels importants rejoignent la mémoire.</p>
+  <div class="note info">Les connexions se gèrent depuis la couche d'intégration embarquée — aucune donnée ne transite par KamaLoka.</div>
+  <div class="prevnext"><a href="#activity-audit">← Activity / Audit</a><a href="#microsoft-365">Suivant · Microsoft 365 →</a></div>
+</section>
+
+<section class="doc" id="microsoft-365">
+  <span class="kicker">Intégrations</span>
+  <h1>Microsoft 365</h1>
+  <p>SharePoint (bibliothèques de documents), Outlook (échanges clés) et Teams (décisions de canal)
+  se connectent via OAuth depuis <b>Sources → Connecter → Microsoft 365</b>.
+  Les permissions Microsoft de chaque utilisateur sont respectées côté Companion.</p>
+  <div class="prevnext"><a href="#google-workspace">← Google Workspace</a><a href="#whatsapp-business">Suivant · WhatsApp Business →</a></div>
+</section>
+
+<section class="doc" id="whatsapp-business">
+  <span class="kicker">Intégrations</span>
+  <h1>WhatsApp Business</h1>
+  <p>Beaucoup de décisions réelles se prennent dans WhatsApp. Companion peut ingérer les conversations
+  Business (export ou API) pour en extraire décisions et procédures — chaque connaissance garde sa provenance
+  (conversation, date, participants).</p>
+  <div class="note warn">La relecture humaine avant validation est indispensable pour ce canal : ton informel, abréviations, demi-mesures.</div>
+  <div class="prevnext"><a href="#microsoft-365">← Microsoft 365</a><a href="#odoo">Suivant · Odoo →</a></div>
+</section>
+
+<section class="doc" id="odoo">
+  <span class="kicker">Intégrations</span>
+  <h1>Odoo</h1>
+  <p>Connectez votre ERP Odoo pour enrichir la mémoire avec vos processus réels : factures, commandes,
+  flux de validation. L'ingestion s'appuie sur l'API Odoo avec un compte de service dédié (permissions minimales).</p>
+  <div class="prevnext"><a href="#whatsapp-business">← WhatsApp Business</a><a href="#slack">Suivant · Slack →</a></div>
+</section>
+
+<section class="doc" id="slack">
+  <span class="kicker">Intégrations</span>
+  <h1>Slack</h1>
+  <p>Connectez les espaces de travail Slack pertinents : les décisions et procédures discutées dans les canaux
+  deviennent des candidats de mémoire. Chaque connaissance cite le canal, la date et le fil de discussion.</p>
+  <div class="prevnext"><a href="#odoo">← Odoo</a><a href="#notion">Suivant · Notion →</a></div>
+</section>
+
+<section class="doc" id="notion">
+  <span class="kicker">Intégrations</span>
+  <h1>Notion</h1>
+  <p>Les pages et bases Notion s'ingèrent avec leur hiérarchie — idéal pour les wikis internes.
+  Connectez depuis <b>Sources → Connecter → Notion</b> et choisissez les espaces à surveiller.</p>
+  <div class="prevnext"><a href="#slack">← Slack</a><a href="#api-personnalisee">Suivant · API personnalisée →</a></div>
+</section>
+
+<section class="doc" id="api-personnalisee">
+  <span class="kicker">Intégrations</span>
+  <h1>API personnalisée</h1>
+  <p>Pour tout autre système, deux portes d'entrée :</p>
+  <ul>
+    <li><b>API REST</b> — poussez des documents et des candidats de mémoire (<a href="#api">voir API</a>) ;</li>
+    <li><b>Webhooks</b> — recevez les événements de Companion dans vos outils (<a href="#webhooks">voir Webhooks</a>).</li>
+  </ul>
+  <div class="prevnext"><a href="#notion">← Notion</a><a href="#utilisateurs">Suivant · Utilisateurs →</a></div>
+</section>
+
+<!-- ══════════════════════ ADMINISTRATION ══════════════════════ -->
+
+<section class="doc" id="utilisateurs">
+  <span class="kicker">Administration</span>
+  <h1>Utilisateurs</h1>
+  <p>Paramètres → <b>Membres</b> : invitations par email (lien d'activation à usage unique, expirant),
+  rôles attribués, désactivation. Chaque utilisateur peut être rattaché à une fiche employé pour lier sa session à sa mémoire.</p>
+  <h2>Sécurité des comptes</h2>
+  <ul>
+    <li>Mots de passe hachés (bcrypt), politique de longueur minimale ;</li>
+    <li>Verrouillage temporaire après échecs répétés ;</li>
+    <li>Réinitialisation par lien signé à durée limitée ;</li>
+    <li>Sessions révocables individuellement.</li>
+  </ul>
+  <div class="prevnext"><a href="#api-personnalisee">← API personnalisée</a><a href="#roles">Suivant · Rôles →</a></div>
+</section>
+
+<section class="doc" id="roles">
+  <span class="kicker">Administration</span>
+  <h1>Rôles</h1>
+  <table>
+    <tr><th>Rôle</th><th>Périmètre</th></tr>
+    <tr><td><code>owner</code></td><td>Tout, y compris licence et paramètres critiques</td></tr>
+    <tr><td><code>admin</code></td><td>Gestion des membres, sources, agents, audit</td></tr>
+    <tr><td><code>manager</code></td><td>Validation des connaissances de son périmètre, handovers</td></tr>
+    <tr><td><code>employee</code></td><td>Sa mémoire, Ask, ses handovers</td></tr>
+    <tr><td><code>auditor</code></td><td>Lecture de l'audit uniquement</td></tr>
+    <tr><td><code>agent</code></td><td>Comptes d'exécution pour les agents</td></tr>
+  </table>
+  <div class="prevnext"><a href="#utilisateurs">← Utilisateurs</a><a href="#permissions">Suivant · Permissions →</a></div>
+</section>
+
+<section class="doc" id="permissions">
+  <span class="kicker">Administration</span>
+  <h1>Permissions</h1>
+  <p>Les permissions s'appliquent <b>jusqu'au retrieval</b> : une question posée par un employé ne peut pas
+  faire remonter une connaissance hors de son périmètre, même par détours (citations, agents, MCP).</p>
+  <ul>
+    <li>Portée par <b>département</b> et par <b>poste</b> ;</li>
+    <li>Les <b>agents</b> héritent des permissions de leur initiateur et de leur périmètre d'agent ;</li>
+    <li>Tentative d'accès hors périmètre = refus explicite, journalisé (<code>DENIED</code>).</li>
+  </ul>
+  <div class="prevnext"><a href="#roles">← Rôles</a><a href="#licences">Suivant · Licences →</a></div>
+</section>
+
+<section class="doc" id="licences">
+  <span class="kicker">Administration</span>
+  <h1>Licences</h1>
+  <p>Votre licence est un fichier signé cryptographiquement (Ed25519) par KamaLoka : <b>aucune connexion
+  n'est nécessaire pour la vérifier</b>.</p>
+  <h2>Installer / renouveler</h2>
+  <ol>
+    <li>Paramètres → <b>Facturation → Importer une licence</b> ;</li>
+    <li>Collez le contenu du fichier <code>companion-license.lic</code> reçu du portail client ;</li>
+    <li>Le plan correspondant s'active immédiatement (limites, fonctionnalités).</li>
+  </ol>
+  <h2>Cycle de vie</h2>
+  <table>
+    <tr><th>État</th><th>Effet</th></tr>
+    <tr><td>Active</td><td>Tout fonctionne</td></tr>
+    <tr><td>Grâce (30 j après expiration)</td><td>Tout fonctionne + rappel de renouvellement</td></tr>
+    <tr><td>Restreint</td><td>Consultation, export et <b>backups restent libres</b> ; créations (utilisateurs, agents, intégrations, actions agentiques) suspendues</td></tr>
+  </table>
+  <div class="note ok">Vos données ne sont jamais prises en otage : même sans licence, tout est accessible et exportable.</div>
+  <div class="prevnext"><a href="#permissions">← Permissions</a><a href="#facturation">Suivant · Facturation →</a></div>
+</section>
+
+<section class="doc" id="facturation">
+  <span class="kicker">Administration</span>
+  <h1>Facturation</h1>
+  <p>La page <b>Facturation</b> affiche votre plan, l'usage courant comparé aux limites
+  (utilisateurs, agents, intégrations, clients MCP, stockage) et l'estimation de consommation IA.</p>
+  <div class="note info">Mode <b>BYOK</b> par défaut : vous utilisez vos propres clés API — les fournisseurs vous facturent
+  directement, sans marge KamaLoka. Le mode Managed AI (enveloppe facturée par KamaLoka) se choisit à la commande.</div>
+  <div class="prevnext"><a href="#licences">← Licences</a><a href="#sauvegardes">Suivant · Sauvegardes →</a></div>
+</section>
+
+<section class="doc" id="sauvegardes">
+  <span class="kicker">Administration</span>
+  <h1>Sauvegardes</h1>
+  <p>Paramètres → <b>Sauvegardes → Créer une sauvegarde</b> : export complet en JSON de toutes vos données
+  (mémoires, versions, sources, employés, rôles, audit…) + copie des fichiers importés, avec manifeste.</p>
+  <h2>Automatiser</h2>
+  <pre><code># crontab — tous les jours à 02:00
+0 2 * * * curl -s -X POST -b "session=<cookie-admin>" \
+  https://companion.votreentreprise.com/api/backup</code></pre>
+  <div class="note warn">Conservez au moins une sauvegarde <b>hors du serveur</b> (stockage distant ou bande).</div>
+  <div class="prevnext"><a href="#facturation">← Facturation</a><a href="#restaurer">Suivant · Restaurer Companion →</a></div>
+</section>
+
+<section class="doc" id="restaurer">
+  <span class="kicker">Administration</span>
+  <h1>Restaurer Companion</h1>
+  <ol>
+    <li>Installez Companion sur la machine cible (même ou nouvelle) — <a href="#installation">installation standard</a> ;</li>
+    <li>Paramètres → <b>Sauvegardes → Restaurer</b> et fournissez l'archive de sauvegarde ;</li>
+    <li>Redémarrez — les mémoires sont ré-indexées au démarrage ;</li>
+    <li>Ré-importez votre licence si le serveur a changé (même fichier, aucune contrainte matérielle).</li>
+  </ol>
+  <div class="prevnext"><a href="#sauvegardes">← Sauvegardes</a><a href="#mises-a-jour">Suivant · Mises à jour →</a></div>
+</section>
+
+<section class="doc" id="mises-a-jour">
+  <span class="kicker">Administration</span>
+  <h1>Mises à jour</h1>
+  <p>Companion vérifie périodiquement la dernière version stable publiée par KamaLoka et l'affiche
+  dans les paramètres. <b>Aucune mise à jour n'est jamais appliquée automatiquement.</b></p>
+  <h2>Procédure recommandée</h2>
+  <pre><code>1. Sauvegarde complète        →  POST /api/backup
+2. Récupérer le nouveau kit   →  portail client
+3. docker compose pull && docker compose up -d
+4. Vérifier la santé          →  /api/status (IA OK, mémoire OK)
+5. En cas de problème         →  restaurer la sauvegarde + image précédente</code></pre>
+  <div class="note info">Le portail client affiche la version installée vs la dernière stable, et les notes de version.</div>
+  <div class="prevnext"><a href="#restaurer">← Restaurer</a><a href="#securite">Suivant · Sécurité →</a></div>
+</section>
+
+<section class="doc" id="securite">
+  <span class="kicker">Administration</span>
+  <h1>Sécurité</h1>
+  <ul>
+    <li><b>Chiffrement</b> — secrets et identifiants d'intégration chiffrés au repos (AES-256-GCM) ;</li>
+    <li><b>Sessions</b> — cookies httpOnly, expiration, révocation ;</li>
+    <li><b>Rate limiting</b> — sur l'API et le serveur MCP ;</li>
+    <li><b>En-têtes de sécurité</b> — appliqués par défaut ;</li>
+    <li><b>Moindre privilège</b> — les intégrations utilisent des comptes de service dédiés ;</li>
+    <li><b>Vérification</b> — <code>npm run security:check</code> pour l'audit de configuration.</li>
+  </ul>
+  <div class="note ok">KamaLoka n'a aucun accès à votre instance : le support se fait sur invitation et à votre demande.</div>
+  <div class="prevnext"><a href="#mises-a-jour">← Mises à jour</a><a href="#mcp-server">Suivant · MCP Server →</a></div>
+</section>
+
+<!-- ══════════════════════ DÉVELOPPEURS ══════════════════════ -->
+
+<section class="doc" id="mcp-server">
+  <span class="kicker">Développeurs</span>
+  <h1>MCP Server</h1>
+  <p>Companion expose un serveur <b>MCP (Model Context Protocol)</b> : vos assistants et agents externes
+  (Claude, Cursor, agents maison) interrogent la mémoire d'entreprise — avec permissions, scopes et audit.</p>
+  <h2>Endpoint</h2>
+  <pre><code>POST https://companion.votreentreprise.com/mcp
+Authorization: Bearer &lt;token client MCP&gt;</code></pre>
+  <h2>Outils exposés</h2>
+  <table>
+    <tr><th>Outil</th><th>Description</th></tr>
+    <tr><td><code>search_memory</code></td><td>Recherche sourcée dans la mémoire autorisée</td></tr>
+    <tr><td><code>get_company_context</code></td><td>Contexte général de l'entreprise</td></tr>
+    <tr><td><code>get_role_context</code> / <code>get_employee_context</code></td><td>Contexte d'un poste ou d'une personne</td></tr>
+    <tr><td><code>get_project_context</code></td><td>Contexte d'un projet</td></tr>
+    <tr><td><code>get_knowledge_gaps</code></td><td>Manques de savoir détectés</td></tr>
+    <tr><td><code>create_memory</code></td><td>Créer une <b>candidature</b> de connaissance (jamais validée d'office)</td></tr>
+    <tr><td><code>correct_memory</code></td><td>Proposer une correction sourcée</td></tr>
+    <tr><td><code>create_handover</code> / <code>request_approval</code></td><td>Lancer une transmission, demander une approbation</td></tr>
+  </table>
+  <p>Les clients MCP sont créés par un admin (scopes, outils autorisés, expiration) et révocables à tout moment.
+  Toute demande hors périmètre reçoit <code>DENIED</code> et est journalisée.</p>
+  <div class="prevnext"><a href="#securite">← Sécurité</a><a href="#api">Suivant · API →</a></div>
+</section>
+
+<section class="doc" id="api">
+  <span class="kicker">Développeurs</span>
+  <h1>API</h1>
+  <p>Toutes les routes sont sous <code>/api</code>, authentifiées par cookie de session (même origine)
+  ou par token pour les intégrations serveur.</p>
+  <table>
+    <tr><th>Ressource</th><th>Routes principales</th></tr>
+    <tr><td>Mémoires</td><td><code>GET /api/memories</code> · <code>POST /api/memories</code> · <code>POST /api/memories/:id/verify</code></td></tr>
+    <tr><td>Ask</td><td><code>POST /api/ask</code> — question, filtres, moteur</td></tr>
+    <tr><td>Employés / Rôles</td><td><code>GET /api/employees</code> · <code>GET /api/roles</code></td></tr>
+    <tr><td>Handovers</td><td><code>POST /api/handovers</code> · <code>POST /api/handovers/:id/answers</code> · <code>POST /api/handovers/:id/pack</code></td></tr>
+    <tr><td>Agents</td><td><code>GET /api/agents</code> · <code>POST /api/agents/:id/runs</code> · <code>POST /api/runs/:id/resume</code></td></tr>
+    <tr><td>Risk / Sauvegarde</td><td><code>GET /api/knowledge-risk</code> · <code>POST /api/backup</code></td></tr>
+  </table>
+  <div class="prevnext"><a href="#mcp-server">← MCP Server</a><a href="#authentication">Suivant · Authentication →</a></div>
+</section>
+
+<section class="doc" id="authentication">
+  <span class="kicker">Développeurs</span>
+  <h1>Authentication</h1>
+  <pre><code># 1. Connexion (cookie de session httpOnly)
+curl -c cookies.txt -X POST https://…/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"vous@entreprise.com","password":"…"}'
+
+# 2. Appel authentifié
+curl -b cookies.txt https://…/api/memories
+
+# 3. Client MCP (Authorization Bearer)
+curl -H "Authorization: Bearer mcp_…" https://…/mcp</code></pre>
+  <div class="prevnext"><a href="#api">← API</a><a href="#webhooks">Suivant · Webhooks →</a></div>
+</section>
+
+<section class="doc" id="webhooks">
+  <span class="kicker">Développeurs</span>
+  <h1>Webhooks</h1>
+  <p>Les événements internes (<code>employee.leaving</code>, <code>memory.contradicted</code>,
+  <code>source.ingested</code>…) peuvent être relayés vers vos outils via la couche d'intégration.
+  Chaque livraison porte une signature vérifiable et les tentatives sont journalisées.</p>
+  <div class="prevnext"><a href="#authentication">← Authentication</a><a href="#exemples">Suivant · Exemples →</a></div>
+</section>
+
+<section class="doc" id="exemples">
+  <span class="kicker">Développeurs</span>
+  <h1>Exemples</h1>
+  <h2>Poser une question avec filtre de rôle</h2>
+  <pre><code>curl -b cookies.txt -X POST https://…/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Procédure d\\'escalade fournisseur ?","roleId":"&lt;role-uuid&gt;"}'</code></pre>
+  <h2>Client MCP (Node.js)</h2>
+  <pre><code>import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+
+const client = new Client({ name: "mon-agent", version: "1.0.0" })
+await client.connect(new StreamableHTTPClientTransport(
+  new URL("https://companion.entreprise.com/mcp"),
+  { requestInit: { headers: { Authorization: "Bearer mcp_…" } } },
+))
+const r = await client.callTool({ name: "search_memory", arguments: { query: "procédure R03" } })</code></pre>
+  <div class="prevnext"><a href="#webhooks">← Webhooks</a><a href="#diagnostic">Suivant · Diagnostic →</a></div>
+</section>
+
+<!-- ══════════════════════ DÉPANNAGE ══════════════════════ -->
+
+<section class="doc" id="diagnostic">
+  <span class="kicker">Dépannage</span>
+  <h1>Diagnostic</h1>
+  <pre><code># Santé globale (IA, mémoire, compteurs)
+curl -s https://…/api/status | jq
+
+# État du moteur mémoire
+curl -s -b cookies.txt https://…/api/system/memory-provider/health | jq
+
+# Stack Docker
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 companion</code></pre>
+  <div class="prevnext"><span></span><a href="#mem0-degraded">Suivant · Mem0 degraded →</a></div>
+</section>
+
+<section class="doc" id="mem0-degraded">
+  <span class="kicker">Dépannage</span>
+  <h1>Mem0 degraded</h1>
+  <p><b>Symptôme :</b> l'état mémoire affiche « dégradé » ou le moteur retombe sur le moteur natif.</p>
+  <ul>
+    <li>Vérifiez que le modèle local tourne : <code>curl http://127.0.0.1:11434/api/tags</code> ;</li>
+    <li>Modèles requis présents (<code>ollama pull qwen2.5:7b nomic-embed-text</code>) ;</li>
+    <li>Le mode dégradé n'interrompt pas le service : Companion bascule sur le moteur natif et continue de répondre.</li>
+  </ul>
+  <div class="prevnext"><a href="#diagnostic">← Diagnostic</a><a href="#activepieces-offline">Suivant · Activepieces offline →</a></div>
+</section>
+
+<section class="doc" id="activepieces-offline">
+  <span class="kicker">Dépannage</span>
+  <h1>Activepieces offline</h1>
+  <p><b>Symptôme :</b> les connexions Drive/Gmail ne se créent plus ou les outils externes disparaissent.</p>
+  <ul>
+    <li><code>docker compose ps activepieces</code> — le conteneur doit être « Up » ;</li>
+    <li>Redémarrage : <code>docker compose restart activepieces</code> ;</li>
+    <li>Companion redécouvre les outils automatiquement au retour du service — rien à reconfigurer.</li>
+  </ul>
+  <div class="prevnext"><a href="#mem0-degraded">← Mem0 degraded</a><a href="#postgresql">Suivant · PostgreSQL →</a></div>
+</section>
+
+<section class="doc" id="postgresql">
+  <span class="kicker">Dépannage</span>
+  <h1>PostgreSQL</h1>
+  <pre><code># Le conteneur répond ?
+docker exec -it companion-db pg_isready -U companion
+
+# Taille et santé
+docker exec -it companion-db psql -U companion -d companion \
+  -c "SELECT pg_size_pretty(pg_database_size('companion'));"</code></pre>
+  <p>Les données vivent dans le volume <code>companion-pgdata</code> — sauvegardé par le mécanisme de backup JSON
+  et sauvegeable à froid en arrêtant la stack.</p>
+  <div class="prevnext"><a href="#activepieces-offline">← Activepieces offline</a><a href="#redis">Suivant · Redis →</a></div>
+</section>
+
+<section class="doc" id="redis">
+  <span class="kicker">Dépannage</span>
+  <h1>Redis</h1>
+  <p>Redis sert au rate limiting et aux files. S'il est indisponible, Companion bascule sur un limiteur
+  en mémoire : le service continue, la protection anti-abus devient locale au process.</p>
+  <pre><code>docker compose -f docker-compose.prod.yml restart redis</code></pre>
+  <div class="prevnext"><a href="#postgresql">← PostgreSQL</a><a href="#logs">Suivant · Logs →</a></div>
+</section>
+
+<section class="doc" id="logs">
+  <span class="kicker">Dépannage</span>
+  <h1>Logs</h1>
+  <pre><code># Application
+docker compose -f docker-compose.prod.yml logs -f companion
+
+# Journal d'audit applicatif (qui a fait quoi)
+curl -s -b cookies.txt https://…/api/audit | jq
+
+# Rotation : configurée par défaut dans docker-compose.prod.yml (max-size)</code></pre>
+  <div class="note info">Un problème persistant ? Écrivez à <a href="mailto:support@kamaloka.ai">support@kamaloka.ai</a>
+  avec le diagnostic (<code>/api/status</code>) et les 100 dernières lignes de logs.</div>
+  <div class="prevnext"><a href="#redis">← Redis</a><span></span></div>
+</section>
+
+</main>
+</div>
+
+<footer>Companion — KamaLoka AI Technologies · <a href="/" style="color:var(--brand)">Site produit</a> · <a href="https://portal.companion.kamaloka.ai" style="color:var(--brand)">Portail client</a></footer>
+
+<script>
+const links = [...document.querySelectorAll('.sidebar a')]
+const sections = [...document.querySelectorAll('.doc')]
+function show() {
+  const id = (location.hash || '#qu-est-ce-que-companion').slice(1)
+  const target = document.getElementById(id) ?? sections[0]
+  sections.forEach(s => s.classList.toggle('active', s === target))
+  links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + target.id))
+  window.scrollTo({ top: 0 })
+}
+window.addEventListener('hashchange', show)
+show()
+</script>
+</body>
+</html>
