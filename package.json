@@ -29,7 +29,10 @@
     "@modelcontextprotocol/sdk": "1.30.0",
     "@remixicon/react": "^4.9.0",
     "@tailwindcss/postcss": "^4.3.3",
+    "@tanstack/react-router": "1.170.38",
+    "@tanstack/react-start": "1.168.56",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/start-plugin": "1.111.2",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "cookie-parser": "^1.4.7",
@@ -48,7 +51,8 @@
     "react-aria-components": "^1.21.1",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.3",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "vite-tsconfig-paths": "6.1.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",

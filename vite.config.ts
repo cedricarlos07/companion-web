@@ -1,21 +1,11 @@
 import { defineConfig } from 'vite'
-import path from 'node:path'
-import react from '@vitejs/plugin-react'
+import tsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
+import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [tanstackStart(), tsConfigPaths({ projects: ['./tsconfig.json'] }), tailwindcss()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5299',
-        changeOrigin: true,
-      },
-    },
+    alias: { '@': path.resolve(__dirname, './src') },
   },
 })
