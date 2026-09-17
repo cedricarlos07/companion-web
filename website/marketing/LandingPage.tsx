@@ -57,7 +57,7 @@ function Header() {
         </div>
         <span className="flex-1" />
         <ButtonLink variant="secondary" size="small" href="/portal/login">Espace client</ButtonLink>
-        <ButtonLink variant="primary" size="small" leadingIcon={adaptIcon(ArrowUpRightIcon, 18)} href="#demo">
+        <ButtonLink variant="primary" size="small" leadingIcon={adaptIcon(ArrowUpRightIcon, 18)} href="/demo">
           Demander une démo
         </ButtonLink>
       </nav>
@@ -199,10 +199,10 @@ export function LandingPage() {
             instantanément le contexte aux nouveaux collaborateurs — et aux agents IA.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ArrowRight02Icon, 20)} href="#demo">
+            <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ArrowRight02Icon, 20)} href="/demo">
               Demander une démo
             </ButtonLink>
-            <ButtonLink variant="secondary" size="medium" href="#demo">Commencer un pilote</ButtonLink>
+            <ButtonLink variant="secondary" size="medium" href="/demo?offre=pilote">Commencer un pilote</ButtonLink>
           </div>
           <p className="mt-6 text-body-2-medium text-text-tertiary">
             Déjà client ? <a href="/portal/login" className="font-semibold text-accent-600 no-underline">Télécharger Companion</a>
@@ -386,10 +386,10 @@ sudo ./install.sh   # licence .lic demandée à l'installation`}</code></pre>
             premier onboarding généré.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <ButtonLink variant="primary" size="medium" href="mailto:contact@kamaloka.ai?subject=Démo%20Companion">
+            <ButtonLink variant="primary" size="medium" href="/demo">
               Demander une démo
             </ButtonLink>
-            <ButtonLink variant="secondary" size="medium" href="mailto:contact@kamaloka.ai?subject=Pilote%20Companion%2030j">
+            <ButtonLink variant="secondary" size="medium" href="/demo?offre=pilote">
               Commencer un pilote
             </ButtonLink>
           </div>

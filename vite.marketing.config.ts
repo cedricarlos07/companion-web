@@ -19,6 +19,7 @@ export default defineConfig({
       input: {
         landing: path.resolve(__dirname, 'website/landing.html'),
         docs: path.resolve(__dirname, 'website/docs.html'),
+        demo: path.resolve(__dirname, 'website/demo.html'),
       },
     },
   },

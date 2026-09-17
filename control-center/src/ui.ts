@@ -13,7 +13,7 @@ type Req = Request
 type Res = Response
 
 function page(title: string, body: string, adminKey?: string): string {
-  const nav = ['/', 'Dashboard', '/customers', 'Clients', '/licenses', 'Licences', '/instances', 'Instances', '/invoices', 'Factures']
+  const nav = ['/', 'Dashboard', '/leads', 'Demandes démo', '/customers', 'Clients', '/licenses', 'Licences', '/instances', 'Instances', '/invoices', 'Factures']
   const navHtml = Array.from({ length: nav.length / 2 }, (_, i) =>
     `<a href="${nav[i * 2]}${adminKey ? '' : ''}">${nav[i * 2 + 1]}</a>`).join('')
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
@@ -111,6 +111,41 @@ export function buildUi(dbh: DbHandle): Router {
     ${Object.entries(PLANS).map(([k, p]) => `<tr><td><b>${p.label}</b></td><td>${formatFcf(p.priceAnnualFcf)}</td><td>${formatFcf(p.priceMonthlyFcf)}</td><td>${formatFcf(p.installationFcf)}</td><td>${p.maxInstances}</td></tr>`).join('')}
     </table>`
     res.send(page('Dashboard', body))
+  })
+
+  /* Demandes de démo */
+  router.get('/leads', async (_req: Req, res: Res) => {
+    const rows = await dbh.query<{
+      id: string; full_name: string; email: string; phone: string; company: string; role: string;
+      company_size: string; problem: string; tools: string; deployment: string; message: string;
+      offer: string; status: string; created_at_txt: string
+    }>(`SELECT *, created_at::text AS created_at_txt FROM demo_requests ORDER BY created_at DESC`)
+    const badges: Record<string, string> = { new: 'warn', contacted: 'ok', demo_scheduled: 'ok', won: 'ok', lost: 'mute' }
+    const labels: Record<string, string> = { new: 'Nouveau', contacted: 'Contacté', demo_scheduled: 'Démo planifiée', won: 'Gagné', lost: 'Perdu' }
+    res.send(page('Demandes démo', `<h1>Demandes de démo (${rows.length})</h1>
+      <table><tr><th>Date</th><th>Prospect</th><th>Entreprise</th><th>Problème</th><th>Taille</th><th>Statut</th><th>Action</th></tr>
+      ${rows.map((l) => `<tr>
+        <td class="muted">${new Date(l.created_at_txt).toLocaleDateString('fr-FR')}</td>
+        <td><b>${l.full_name}</b><br><a href="mailto:${l.email}" class="muted">${l.email}</a>${l.phone ? `<br class="muted">${l.phone}` : ''}</td>
+        <td>${l.company}<br><span class="muted">${l.role || ''}</span></td>
+        <td>${l.problem}${l.tools ? `<br><span class="muted">Outils : ${l.tools}</span>` : ''}${l.deployment ? `<br><span class="muted">Déploiement : ${l.deployment}</span>` : ''}${l.message ? `<br><span class="muted">« ${l.message} »</span>` : ''}</td>
+        <td>${l.company_size}</td>
+        <td><span class="badge ${badges[l.status] ?? 'mute'}">${labels[l.status] ?? l.status}</span></td>
+        <td><form method="post" action="/leads/${l.id}/status">
+          <select name="status"><option value="new">Nouveau</option><option value="contacted">Contacté</option><option value="demo_scheduled">Démo planifiée</option><option value="won">Gagné</option><option value="lost">Perdu</option></select>
+          <button class="ghost" type="submit">OK</button></form></td>
+      </tr>`).join('')}
+      </table>${rows.length === 0 ? '<p class="muted">Aucune demande pour le moment.</p>' : ''}`))
+  })
+
+  router.post('/leads/:id/status', async (req: Req, res: Res) => {
+    const status = String((req.body as Record<string, string>).status ?? 'new')
+    if (['new', 'contacted', 'demo_scheduled', 'won', 'lost'].includes(status)) {
+      await dbh.exec(
+        `UPDATE demo_requests SET status = '${status.replace(/'/g, "''")}' WHERE id = '${String(req.params.id).replace(/'/g, "''")}'`,
+      )
+    }
+    res.redirect('/leads')
   })
 
   /* Clients */

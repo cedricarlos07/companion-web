@@ -237,6 +237,26 @@ export function buildAdminApi(dbh: DbHandle): Router {
     res.json({ portalUserId: rows[0].id })
   })
 
+  /* ----------------------------- Demo leads ------------------------------- */
+
+  router.get('/demo-requests', async (_req, res) => {
+    const rows = await dbh.query(
+      `SELECT * FROM demo_requests ORDER BY created_at DESC`,
+    )
+    res.json({ leads: rows })
+  })
+
+  router.post('/demo-requests/:id/status', async (req, res) => {
+    const { status } = req.body as { status?: string }
+    if (!status || !['new', 'contacted', 'demo_scheduled', 'won', 'lost'].includes(status)) {
+      return res.status(400).json({ error: 'statut invalide' })
+    }
+    await dbh.exec(
+      `UPDATE demo_requests SET status = '${status.replace(/'/g, "''")}' WHERE id = '${String(req.params.id).replace(/'/g, "''")}'`,
+    )
+    res.json({ ok: true })
+  })
+
   /* ------------------------------ Dashboard -------------------------------- */
 
   /** Arrêt propre (flush PGlite avant exit) — admin uniquement. */

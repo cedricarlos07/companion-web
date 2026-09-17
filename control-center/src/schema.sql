@@ -76,3 +76,21 @@ CREATE TABLE IF NOT EXISTS releases (
   minimum_version text NOT NULL DEFAULT '0.0.0',
   published_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Demandes de démo (landing → Control Center)
+CREATE TABLE IF NOT EXISTS demo_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name text NOT NULL,
+  email text NOT NULL,
+  phone text NOT NULL DEFAULT '',
+  company text NOT NULL,
+  role text NOT NULL DEFAULT '',
+  company_size text NOT NULL DEFAULT '',
+  problem text NOT NULL DEFAULT '',
+  tools text NOT NULL DEFAULT '',
+  deployment text NOT NULL DEFAULT '',
+  message text NOT NULL DEFAULT '',
+  offer text NOT NULL DEFAULT 'demo',
+  status text NOT NULL DEFAULT 'new',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
