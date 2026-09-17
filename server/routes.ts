@@ -532,13 +532,24 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   api.get('/entitlements', authRequired(dbh), async (req, res) => {
     const { getEntitlements } = await import('./services/entitlements.js')
-    res.json({ entitlements: await getEntitlements(dbh, req.user!.organizationId) })
+    const planRows = await dbh
+      .query<{ plan: string }>(`SELECT plan FROM org_entitlements WHERE organization_id = '${req.user!.organizationId}'`)
+      .catch(() => [])
+    res.json({
+      entitlements: await getEntitlements(dbh, req.user!.organizationId),
+      plan: planRows[0]?.plan ?? 'pilot',
+    })
   })
 
   api.get('/license', authRequired(dbh), async (req, res) => {
     const { checkLicenseStatus } = await import('./services/licenses.js')
     const license = await checkLicenseStatus(dbh, req.user!.organizationId)
     res.json(license)
+  })
+
+  api.get('/billing/usage', authRequired(dbh), async (req, res) => {
+    const { getUsageReport } = await import('./services/billing.js')
+    res.json({ usage: await getUsageReport(dbh, req.user!.organizationId) })
   })
 
   /* -------------------------------- Ask ----------------------------------- */

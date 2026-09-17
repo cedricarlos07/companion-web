@@ -31,6 +31,7 @@ import {
   CpuIcon,
   ServerStack01Icon,
   Building01Icon,
+  WalletIcon,
 } from '@/lib/icons'
 import { ORG } from '@/data/org'
 import { EMPLOYEES, fullName } from '@/data/employees'
@@ -40,6 +41,7 @@ import { cx } from '@/utils/cx'
 const SECTIONS = [
   { id: 'general', label: 'Général', icon: Settings01Icon },
   { id: 'organization', label: 'Organisation', icon: Building01Icon },
+  { id: 'billing', label: 'Facturation', icon: WalletIcon },
   { id: 'members', label: 'Membres', icon: UserGroupIcon },
   { id: 'ai', label: 'Fournisseurs IA', icon: CpuIcon },
   { id: 'memory', label: 'Mémoire', icon: Database01Icon },
@@ -73,7 +75,7 @@ export function SettingsPage() {
               <li key={s.id}>
                 <button
                   type="button"
-                  onClick={() => setSection(s.id)}
+                  onClick={() => (s.id === 'billing' ? navigate('/billing') : setSection(s.id))}
                   aria-current={section === s.id ? 'true' : undefined}
                   className={cx(
                     'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-body-2-medium transition-colors',

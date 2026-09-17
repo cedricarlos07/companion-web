@@ -16,6 +16,7 @@
     "test:agents": "node scripts/test-agents.mjs",
     "test:agent-security": "node scripts/test-agent-security.mjs",
     "test:mcp": "node scripts/test-mcp.mjs",
+    "test:billing": "node scripts/test-billing.mjs",
     "security:check": "bash scripts/security-check.sh"
   },
   "dependencies": {

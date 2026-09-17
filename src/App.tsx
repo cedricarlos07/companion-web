@@ -29,6 +29,7 @@ import { ApprovalsPage } from '@/pages/approvals'
 import { ActivityPage } from '@/pages/activity'
 import { IntegrationsPage } from '@/pages/integrations'
 import { SettingsPage } from '@/pages/settings'
+import { BillingPage } from '@/pages/billing'
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/billing" element={<BillingPage />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/home" replace />} />

@@ -27,6 +27,7 @@ import {
   WhatsappIcon,
 } from '@/lib/icons'
 import { useAppStore } from '@/store/app-store'
+import { api } from '@/services/api'
 
 const STEPS = ['Organisation', 'Intelligence', 'Sources', 'Équipe', 'Terminé'] as const
 
@@ -66,6 +67,7 @@ export function SetupPage() {
   const navigate = useNavigate()
   const { pushToast } = useAppStore()
   const [step, setStep] = useState(0)
+  const [busy, setBusy] = useState(false)
 
   // Step 1
   const [name, setName] = useState('Kamaloka AI')
@@ -73,7 +75,15 @@ export function SetupPage() {
   const [country, setCountry] = useState("Côte d'Ivoire")
   const [size, setSize] = useState('50–100')
   const [lang, setLang] = useState('Français')
-  const step1Valid = name.trim().length > 1
+  const [ownerFirstName, setOwnerFirstName] = useState('')
+  const [ownerLastName, setOwnerLastName] = useState('')
+  const [ownerEmail, setOwnerEmail] = useState('')
+  const [ownerPassword, setOwnerPassword] = useState('')
+  const step1Valid =
+    name.trim().length > 1 &&
+    ownerFirstName.trim().length > 0 &&
+    ownerEmail.includes('@') &&
+    ownerPassword.length >= 8
 
   // Step 2
   const [provider, setProvider] = useState('ollama')
@@ -92,11 +102,65 @@ export function SetupPage() {
 
   function next() {
     if (step === 0 && !step1Valid) return
-    if (step === 3) {
-      const valid = invites.filter((i) => i.email.includes('@'))
-      if (valid.length > 0) pushToast(`${valid.length} invitation(s) prête(s) à être envoyée(s).`)
-    }
     setStep((s) => Math.min(s + 1, STEPS.length - 1))
+  }
+
+  /** Finalise : crée l'organisation + le compte owner, connecte la session, envoie les invitations. */
+  async function finalize() {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/setup', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgName: name, sector, country,
+          ownerFirstName, ownerLastName, ownerEmail, ownerPassword,
+        }),
+      })
+      if (res.status === 409) {
+        pushToast('Cette instance est déjà configurée — connectez-vous.', 'info')
+        navigate('/login')
+        return
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { error?: string } | null
+        pushToast(err?.error ?? 'Échec de la configuration de l\'instance.', 'error')
+        return
+      }
+      // Session ouverte directement pour le nouvel owner.
+      const session = await api.login(ownerEmail, ownerPassword)
+      if (!session) {
+        pushToast('Organisation créée — connectez-vous avec votre compte.', 'info')
+        navigate('/login')
+        return
+      }
+      // Invitations best-effort — le rôle API est en anglais (admin/manager/employee).
+      const roleMap: Record<string, string> = { Administrateur: 'admin', Manager: 'manager', Employé: 'employee' }
+      const valid = invites.filter((i) => i.email.includes('@'))
+      let sent = 0
+      for (const inv of valid) {
+        try {
+          const r = await fetch('/api/invitations', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: inv.email, role: roleMap[inv.role] ?? 'employee' }),
+          })
+          if (r.ok) sent++
+        } catch {
+          /* invitation manquante = non bloquant */
+        }
+      }
+      pushToast(
+        sent > 0
+          ? `Organisation créée · ${sent} invitation(s) envoyée(s).`
+          : 'Organisation créée. Bienvenue dans Companion.',
+      )
+      setStep(4)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -168,6 +232,16 @@ export function SetupPage() {
                   items={LANGS.map((s) => ({ id: s, label: s }))}
                 />
               </div>
+              <h2 className="mb-3 mt-6 text-headline-medium text-text-primary">Compte administrateur</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="Prénom" value={ownerFirstName} onChange={setOwnerFirstName} autoComplete="given-name" placeholder="Ange" />
+                <Input label="Nom" value={ownerLastName} onChange={setOwnerLastName} autoComplete="family-name" placeholder="Niamké" />
+                <Input label="Email administrateur" type="email" value={ownerEmail} onChange={setOwnerEmail} autoComplete="email" placeholder="admin@entreprise.ci" />
+                <Input label="Mot de passe (8 caractères minimum)" type="password" value={ownerPassword} onChange={setOwnerPassword} autoComplete="new-password" placeholder="••••••••" />
+              </div>
+              <p className="mt-3 text-caption-1-medium text-text-tertiary">
+                Ce compte possède tous les droits sur l'instance : utilisateurs, permissions et licence.
+              </p>
             </section>
           )}
 
@@ -330,8 +404,8 @@ export function SetupPage() {
                 Votre mémoire d'entreprise est prête.
               </h1>
               <p className="mx-auto mt-2 max-w-md text-body-medium text-text-secondary">
-                {name} · {selectedSources.length} source(s) connectée(s) · fournisseur{' '}
-                {PROVIDERS.find((p) => p.id === provider)?.name}.
+                {name} · compte administrateur {ownerEmail} · {selectedSources.length} source(s)
+                sélectionnée(s) à connecter.
               </p>
               <div className="mt-6 flex justify-center gap-2">
                 <Button onClick={() => navigate('/home')}>Entrer dans Companion</Button>
@@ -348,8 +422,8 @@ export function SetupPage() {
             >
               {step === 0 ? 'Annuler' : 'Retour'}
             </Button>
-            <Button onClick={next} disabled={step === 0 && !step1Valid}>
-              {step === 3 ? 'Finaliser' : 'Continuer'}
+            <Button onClick={() => (step === 3 ? finalize() : next())} disabled={busy || (step === 0 && !step1Valid)}>
+              {step === 3 ? (busy ? 'Configuration…' : 'Finaliser') : 'Continuer'}
             </Button>
           </div>
         )}
