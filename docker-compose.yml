@@ -2,6 +2,11 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: companion-db
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_USER: companion
       POSTGRES_PASSWORD: companion
@@ -19,6 +24,11 @@ services:
   activepieces:
     image: activepieces/activepieces:latest
     container_name: companion-activepieces
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - '5678:80'
     environment:
@@ -53,6 +63,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: companion-redis
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
 volumes:

@@ -60,9 +60,27 @@ export function buildApiRouter(dbh: DbHandle): Router {
               (SELECT count(*) FROM employees)::text AS employees,
               (SELECT count(*) FROM documents)::text AS documents`,
     )
+    // Monitoring disque
+    let diskFreeGb: number | null = null
+    try {
+      const fsMod = await import('node:fs')
+      const stats = fsMod.statSync('./data')
+      void stats
+      const { execSync } = await import('node:child_process')
+      if (process.platform === 'win32') {
+        const out = execSync('powershell -Command "(Get-CimInstance Win32_LogicalDisk -Filter \\"DeviceID=\'C:\'\\".FreeSpace/1GB)"', { timeout: 5000 }).toString().trim()
+        diskFreeGb = parseFloat(out) || null
+      } else {
+        const out = execSync('df --output=avail -BG / | tail -1 | tr -d "G "').toString().trim()
+        diskFreeGb = parseInt(out) || null
+      }
+    } catch { diskFreeGb = null }
+    const diskWarning = diskFreeGb !== null && diskFreeGb < 10 ? `⚠️ Disque C: seulement ${diskFreeGb} GB libres` : undefined
+
     res.json({
       engine: 'companion-real',
       dbDriver: dbh.driver,
+      disk: { freeGb: diskFreeGb, warning: diskWarning },
       ai: { provider: 'ollama', available: ollama.available, llmModel: ollama.llmModel, embedModel: ollama.embedModel },
       counts: {
         memories: Number(counts[0]?.memories ?? 0),
