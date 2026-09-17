@@ -336,6 +336,7 @@ export function HomePage() {
         {/* Recent knowledge */}
         <Card
           title="Connaissances récentes"
+          className="lg:col-span-2"
           actions={
             <Button variant="ghost" size="xs" onClick={() => navigate('/brain')}>
               Company Brain

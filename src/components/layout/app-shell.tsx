@@ -72,7 +72,7 @@ export function AppShell() {
         <TopBar onOpenSearch={() => setSearchOpen(true)} />
         {banner && <LicenseBannerBar banner={banner} />}
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1200px] px-6 py-6">
+          <div className="w-full px-6 py-6">
             <Outlet />
           </div>
         </main>
