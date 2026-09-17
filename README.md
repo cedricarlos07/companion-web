@@ -1,103 +1,73 @@
 # Companion
 
-**Les personnes passent. Le savoir reste.**
+**Votre entreprise n'oublie plus.**
 
-Plateforme self-hosted de mémoire organisationnelle : ingestion de sources → Memory Engine →
-recherche sourcée → Role Brain → Handover → Onboarding. Le frontend (27 routes, BoardUI,
-Hugeicons) est branché sur un backend réel PostgreSQL/pgvector.
+Companion transforme les documents, emails et conversations de votre entreprise en une mémoire exploitable. Vos équipes posent des questions et obtiennent des réponses sourcées. Les savoirs critiques sont protégés avant les départs.
 
-## Lancer (démo complète, mode le plus simple)
+---
 
-Prérequis : Node 20+, **Ollama** en local (`ollama pull qwen2.5:7b` + `ollama pull nomic-embed-text`).
+## Installation production (VPS Linux)
 
-```powershell
-cd C:\Users\OSSEY\Pictures\COMPANION\HTML
+```bash
+# Prérequis : Docker + Docker Compose sur un VPS Linux propre
+git clone <repo> && cd companion
+
+# Générer les secrets
+export POSTGRES_PASSWORD=$(openssl rand -hex 16)
+export JWT_SECRET=$(openssl rand -hex 32)
+export ENCRYPTION_KEY=$(openssl rand -hex 16)
+export AP_ENCRYPTION_KEY=$(openssl rand -hex 16)
+export AP_JWT_SECRET=$(openssl rand -hex 32)
+
+# Démarrer
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Companion démarre sur `http://<IP>:5299` avec PostgreSQL + pgvector, Redis et Activepieces.
+Le seed crée automatiquement les données de démonstration (12 842 mémoires, 42 employés, 17 rôles).
+
+Première connexion : `admin@kamaloka.local` / mot de passe défini lors du seed (à changer immédiatement).
+
+## Développement local
+
+```bash
 npm install
-npm run dev:server     # API + frontend de production sur http://localhost:5299
-# seed automatique au premier démarrage (Kamaloka AI, 42 employés, 17 rôles, ~4 000 mémoires)
+npm run dev:server     # API + frontend production sur :5299
+npm run dev            # Vite HMR sur :5199 (proxy /api → :5299)
 ```
 
-Connexion : `ange.niamke@kamaloka.ci` / `companion` (rôle Owner).
-Autres comptes seedés : `moussa.kone@kamaloka.ci` (Manager), `audit@kamaloka.ci` (Auditor) — mot de passe `companion`.
+**Mode dev utilise PGlite** (Postgres embarqué) — aucune configuration nécessaire.
 
-Mode développement frontend (HMR) — terminal 2 :
+## Tests
 
-```powershell
-npm run dev            # Vite sur http://localhost:5199, /api proxifié vers :5299
+```bash
+npm run test:demo              # Scénario Moussa → Yann (18/18)
+npm run test:agents            # Scénarios agentiques (18/18)
+npm run test:agent-security    # Denials policy (8/8)
+npm run test:mcp               # MCP Server tools (12/12)
+npm run test:memory-providers  # Benchmark fusion vs native
 ```
-
-## Le test qui prouve que Companion est réel
-
-```powershell
-npm run dev:server     # serveur lancé
-npm run test:demo      # CRITICAL DEMO TEST de bout en bout (17 étapes)
-```
-
-Le script crée réellement un employé « Moussa » avec le rôle Responsable Commercial, importe
-3 documents (`scripts/demo-docs/`), vérifie l'extraction de memories, pose
-« Comment préparons-nous un appel d'offres ? » et vérifie la réponse sourcée, déclare le départ,
-détecte les lacunes, répond à l'entretien, valide la mémoire produite, génère le Handover Pack
-(humain + machine), assigne Yann et génère son onboarding J1/J7/J30.
 
 ## Architecture
 
-```
-HTML/
-├── src/                  # Frontend Vite + React 19 + TS (27 routes, gelé visuellement)
-│   └── services/api.ts   # Client API — fallback mock si backend éteint (aucune route ne casse)
-├── server/               # Backend Node/TypeScript (Express)
-│   ├── db/               # Drizzle + migrations SQL (17 tables, pgvector 768)
-│   ├── services/         # ingestion, embeddings, extraction, memory, ask, risk, handover, onboarding
-│   ├── providers/        # Ollama (BYOK/local) — fallback déterministe si Ollama absent
-│   ├── auth.ts           # JWT cookie httpOnly + RBAC (owner/admin/manager/employee/auditor/agent)
-│   ├── seed.ts           # Seed déterministe aligné sur les chiffres de démo
-│   └── index.ts          # Express + API + serve static dist/
-├── scripts/              # demo-test.mjs (Moussa→Yann), seed-run.ts, screenshot-routes.cjs
-├── docker-compose.yml    # PostgreSQL 16 + pgvector (déploiement self-hosted)
-└── data/pg/              # PGlite (Postgres embarqué) — base de dev, créée au premier lancement
-```
+| Couche | Technologie | Rôle |
+|---|---|---|
+| Frontend | React 19 + BoardUI + Hugeicons | 27 routes, français, production-grade |
+| Agent Runtime | Mastra 1.67 | 4 agents, 5 workflows, suspend/resume HITL |
+| Memory Runtime | Mem0 3.1.8 + natif (fusion) | Recherche hybride, consolidation, provenance |
+| Intégrations | Activepieces | 760+ apps connectées via un seul hub |
+| MCP Server | @modelcontextprotocol/sdk 1.30 | Claude/Codex/Cursor interrogent le Brain |
+| Base de données | PostgreSQL 16 + pgvector + Drizzle ORM | 17 tables, vectoriel 768-dim |
+| Sécurité | JWT + RBAC + Policy Engine + Audit | 6 rôles, allowlists, budgets, lockout |
 
-### Base de données
+## Config Activepieces (intégrations externes)
 
-- **Dev/démo** : PGlite (Postgres 16 embarqué, extension pgvector incluse) dans `data/pg` — zéro service à installer.
-- **Production/self-hosted** : `docker compose up -d` puis `DATABASE_URL=postgres://companion:companion@localhost:5433/companion`.
-  Même schéma Drizzle, mêmes migrations SQL (`server/db/migrations/`). Sur PostgreSQL, le seed cible
-  les chiffres complets de démo (12 842 mémoires) ; sur PGlite il est réduit (~4 000) pour tenir dans
-  la mémoire WASM — tous les écrans lisent la base, donc les chiffres restent cohérents entre eux.
-
-### Pipeline d'ingestion
-
-`source → extract (pdf/docx/txt/md/csv/paste) → normalize → chunk → embed (pgvector)
-→ extraction candidates (LLM JSON structuré, fallback heuristique française)
-→ déduplication (similarité ≥ 0,93 = confirmation) → détection de contradictions (≥ 0,82 = lien
-« contradicts » + statut `contradicted`) → save + index`. Le document original est toujours
-conservé (`documents.raw_text` + fichier sur disque) et chaque mémoire garde sa provenance
-(`memory_sources` : document, chunk, extrait, localisation).
-
-### Règles du Memory Engine
-
-- Une extraction LLM/heuristique n'atteint jamais `verified` sans validation humaine.
-- Toute correction crée une `memory_versions` (jamais d'écrasement silencieux).
-- Employee Memory ≠ Role Brain : la promotion vers le rôle (`POST /memories/:id/promote`)
-  n'accepte que les types durables et conserve contributeur + provenance.
-- Ask Companion : recherche hybride (sémantique pgvector 55 % + lexical 20 % + importance 13 %
-  + confiance 7 % + fraîcheur 5 %) ; abstention explicite si contexte insuffisant.
-- Knowledge Risk : score explicable (single-owner 30 %, couverture 25 %, fraîcheur 15 %,
-  diversité des sources 10 %, préparation du transfert 20 %) avec facteurs détaillés par écran.
-
-## Vérifications
-
-```powershell
-npm run typecheck          # frontend
-npm run typecheck:server   # backend
-npm run build              # build production (dist/)
-npm run test:demo          # flow Moussa → Yann de bout en bout
+```env
+ACTIVEPIECES_ENABLED=true
+ACTIVEPIECES_URL=http://localhost:5678
+ACTIVEPIECES_MCP_TOKEN=<généré dans Activepieces → Settings → MCP>
+ACTIVEPIECES_PROJECT_ID=<project id>
 ```
 
-## État et suite
-
-Fait : phases 1-8 + 11-12 du plan backend (DB, auth/RBAC, ingestion, Memory Engine, Ask réel,
-Employee/Role Brain, Knowledge Risk explicable, Handover complet, Onboarding, audit).
-
-Prochaines étapes prévues : Agent Orchestrator (Goal → Plan → Skill → Tool → Approval → Execute →
-Verify → Feedback), MCP Server + Client, puis premier connecteur réel (Google Drive ou Microsoft 365).
+Companion provisionne automatiquement les flows (Drive, Gmail, etc.) au démarrage.
+Le client n'interagit qu'avec le bouton **"Connecter"** dans l'UI Companion — OAuth Google géré par Activepieces.
