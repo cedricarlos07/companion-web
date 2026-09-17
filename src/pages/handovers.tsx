@@ -16,6 +16,7 @@ const HANDOVER_STATUS: Record<string, { label: string; cls: string }> = {
   analyzing: { label: 'Analyse en cours', cls: 'bg-status-blue-background text-status-blue-text' },
   'in-progress': { label: 'En cours', cls: 'bg-status-yellow-background text-status-yellow-text' },
   interview: { label: 'Entretien en cours', cls: 'bg-status-yellow-background text-status-yellow-text' },
+  gaps: { label: 'Manques détectés', cls: 'bg-status-yellow-background text-status-yellow-text' },
   ready: { label: 'Prêt', cls: 'bg-status-lime-background text-status-lime-text' },
 }
 
@@ -48,7 +49,7 @@ export function HandoversPage() {
 
       <div className="space-y-3">
         {handovers.map((h) => {
-          const meta = HANDOVER_STATUS[h.status]
+          const meta = HANDOVER_STATUS[h.status] ?? HANDOVER_STATUS.analyzing
           return (
             <div
               key={h.id}

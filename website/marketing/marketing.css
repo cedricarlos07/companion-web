@@ -1,0 +1,6 @@
+/* Entrée CSS marketing — design system Companion complet.
+ * @source explicites : le scanner Tailwind démarre à la racine Vite (website/)
+ * et ne verrait ni les composants BoardUI (src/) ni ce dossier sans cela. */
+@import '../../src/styles/globals.css';
+@source '../../src';
+@source './';
