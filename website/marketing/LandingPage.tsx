@@ -5,10 +5,10 @@ import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
 import type { IconSvgElement } from '@hugeicons/react'
 import { cx } from '@/utils/cx'
 import {
-  AiBrain01Icon, AlertCircleIcon, ApiIcon, ArrowRight02Icon, ArrowUpRightIcon, BotIcon,
+  AiBrain01Icon, AlertCircleIcon, ApiIcon, ArrowRight02Icon, ArrowUpRightIcon, BotIcon, Cancel01Icon,
   Building01Icon, ChartIcon, CloudIcon, CloudUploadIcon, Database01Icon, DocumentValidationIcon,
   FileEditIcon, GoogleDriveIcon, HandshakeIcon, HistoryIcon, HierarchyIcon, Key02Icon,
-  MicrosoftIcon, NetworkIcon, PlugIcon, RocketIcon, ServerStack01Icon, Shield01Icon,
+  MenuIcon, MicrosoftIcon, NetworkIcon, PlugIcon, RocketIcon, ServerStack01Icon, Shield01Icon,
   ShieldAlertIcon, ShieldKeyIcon, ShieldUserIcon, TimeIcon, UserCircleIcon, UserRemoveIcon,
   WhatsappIcon,
 } from '@/lib/icons'
@@ -78,19 +78,21 @@ export function BrandMark({ size = 'md' }: { size?: 'md' | 'lg' }) {
 }
 
 function Header() {
+  const [open, setOpen] = useState(false)
   const links: [string, string][] = [
     ['#perdu', 'Le problème'],
     ['#produit', 'Le produit'],
+    ['#agents', 'Agents IA'],
     ['#tarifs', 'Tarifs'],
     ['/docs', 'Documentation'],
   ]
   return (
-    <header className="sticky top-0 z-20 border-b border-separator-border bg-background-primary-default/95 backdrop-blur">
-      <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
-        <a href="/" className="flex items-center gap-2.5 no-underline">
+    <header className="sticky top-0 z-30 border-b border-separator-border bg-background-primary-default/95 backdrop-blur">
+      <nav className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
+        <a href="/" className="flex items-center gap-2.5 no-underline" onClick={() => setOpen(false)}>
           <BrandMark />
           <span className="text-headline-semibold text-text-primary">
-            COMPANION <span className="text-text-tertiary">· by KamaLoka</span>
+            COMPANION<span className="hidden text-text-tertiary lg:inline"> · by KamaLoka</span>
           </span>
         </a>
         <div className="ml-4 hidden items-center gap-5 lg:flex">
@@ -101,11 +103,41 @@ function Header() {
           ))}
         </div>
         <span className="flex-1" />
-        <ButtonLink variant="secondary" size="small" href="/portal/login">Espace client</ButtonLink>
-        <ButtonLink variant="primary" size="small" leadingIcon={adaptIcon(ArrowUpRightIcon, 18)} href="/demo">
-          Demander une démonstration
+        <ButtonLink variant="secondary" size="small" href="/portal/login" className="hidden sm:inline-flex">
+          <span className="hidden md:inline">Espace client</span>
+          <span className="md:hidden">Client</span>
         </ButtonLink>
+        <ButtonLink variant="primary" size="small" leadingIcon={adaptIcon(ArrowUpRightIcon, 18)} href="/demo">
+          <span className="hidden sm:inline">Demander une démonstration</span>
+          <span className="sm:inline md:hidden">Démo</span>
+          <span className="hidden sm:hidden">Démo</span>
+        </ButtonLink>
+        <button
+          type="button"
+          aria-label={open ? 'Fermer le menu' : 'Ouvrir le menu'}
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="flex size-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-background-secondary-default hover:text-text-primary lg:hidden"
+        >
+          <HugeIcon icon={open ? Cancel01Icon : MenuIcon} size="md" />
+        </button>
       </nav>
+      {open && (
+        <div className="border-t border-separator-border bg-background-primary-default lg:hidden">
+          <nav className="mx-auto flex max-w-6xl flex-col px-4 py-3">
+            {links.map(([href, label]) => (
+              <a key={href} href={href} onClick={() => setOpen(false)}
+                className="rounded-lg px-2.5 py-2.5 text-body-medium text-text-secondary no-underline hover:bg-background-secondary-default hover:text-text-primary">
+                {label}
+              </a>
+            ))}
+            <a href="/portal/login" onClick={() => setOpen(false)}
+              className="rounded-lg px-2.5 py-2.5 text-body-medium font-semibold text-text-primary no-underline hover:bg-background-secondary-default">
+              Espace client
+            </a>
+          </nav>
+        </div>
+      )}
     </header>
   )
 }
@@ -130,7 +162,7 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: ReactNod
   return (
     <Reveal className="mx-auto max-w-3xl text-center">
       <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="text-title-2-medium text-text-primary">{title}</h2>
+      <h2 className="font-medium text-text-primary" style={{ fontSize: 'clamp(24px,3.2vw,30px)', lineHeight: 1.18 }}>{title}</h2>
       {sub && <p className="mx-auto mt-4 max-w-2xl text-body-medium text-text-secondary">{sub}</p>}
     </Reveal>
   )
@@ -202,7 +234,7 @@ function PriceCard({ chip, name, price, unit, pitch, features, note, cta, href, 
         {highlight && <Chip variant="subtle" color="lime">Recommandé</Chip>}
       </div>
       <p className="mt-1 text-caption-1-medium text-text-tertiary">{chip}</p>
-      <p className="mt-4 text-title-1-semibold text-text-primary">{price}</p>
+      <p className="mt-4 font-semibold text-text-primary" style={{ fontSize: 'clamp(26px,3.5vw,36px)', lineHeight: 1.1 }}>{price}</p>
       <p className="text-caption-1-medium text-text-tertiary">{unit}</p>
       <p className="mt-3 text-body-2-regular text-text-secondary">{pitch}</p>
       <ul className="mt-4 space-y-1.5 border-t border-separator-border pt-4">
@@ -324,10 +356,11 @@ export function LandingPage() {
               Self-hosted. Vos données restent dans votre infrastructure.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ChartIcon, 20)} href="/demo?objet=risk">
+              <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ChartIcon, 20)} href="/demo?objet=risk"
+                className="w-full justify-center sm:w-auto">
                 Évaluer le risque de mon entreprise
               </ButtonLink>
-              <ButtonLink variant="secondary" size="medium" href="/demo">Demander une démonstration</ButtonLink>
+              <ButtonLink variant="secondary" size="medium" href="/demo" className="w-full justify-center sm:w-auto">Demander une démonstration</ButtonLink>
             </div>
           </Reveal>
           <Reveal delay={120}>
@@ -483,7 +516,7 @@ export function LandingPage() {
       </Section>
 
       {/* 6 · Bandeau signature de marque */}
-      <Section dark className="!py-14">
+      <Section dark className="!px-6 !py-16 sm:!py-14">
         <Reveal className="text-center">
           <p className="text-caption-1-medium uppercase tracking-[0.2em] text-companion-300">Companion</p>
           <p
@@ -654,10 +687,11 @@ export function LandingPage() {
             Découvrez-le avant son départ.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ChartIcon, 20)} href="/demo?objet=risk">
+            <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ChartIcon, 20)} href="/demo?objet=risk"
+              className="w-full justify-center sm:w-auto">
               Évaluer mon Knowledge Risk
             </ButtonLink>
-            <ButtonLink variant="secondary" size="medium" href="/demo">
+            <ButtonLink variant="secondary" size="medium" href="/demo" className="w-full justify-center sm:w-auto">
               Demander une démo de 30 min
             </ButtonLink>
           </div>
