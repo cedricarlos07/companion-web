@@ -458,6 +458,58 @@ export function buildApiRouter(dbh: DbHandle): Router {
     res.json({ ok: true })
   })
 
+  /* --------------------------- Backup / Restore ---------------------------- */
+
+  api.post('/backup', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { createBackup } = await import('./services/backup.js')
+    const backupDir = await createBackup(dbh, req.user!.organizationId)
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'backup.created', targetType: 'backup',
+      detail: { dir: backupDir },
+    })
+    res.json({ backupDir })
+  })
+
+  api.post('/restore', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    const { backupDir } = req.body as { backupDir?: string }
+    if (!backupDir) return res.status(400).json({ error: 'backupDir requis' })
+    const { restoreBackup } = await import('./services/backup.js')
+    const result = await restoreBackup(dbh, backupDir)
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'restore.completed', targetType: 'backup',
+      detail: { backupDir, total: result.total },
+    })
+    res.json(result)
+  })
+
+  api.get('/backups', authRequired(dbh), requireRole('owner', 'admin'), async (_req, res) => {
+    const { listBackups } = await import('./services/backup.js')
+    res.json({ backups: listBackups() })
+  })
+
+  /* --------------------------- Sécurité check ------------------------------ */
+
+  api.get('/security/check', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const issues: string[] = []
+    if (process.env.NODE_ENV === 'production' && dbh.driver === 'pglite') {
+      issues.push('PGlite détecté en production — PostgreSQL requis')
+    }
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+      issues.push('JWT_SECRET trop court (32+ caractères requis)')
+    }
+    if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
+      issues.push('ENCRYPTION_KEY trop courte (32+ caractères requis)')
+    }
+    res.json({ ok: issues.length === 0, issues, checkedAt: new Date().toISOString() })
+  })
+
+  /* --------------------------- Setup wizard -------------------------------- */
+
+  api.get('/setup/status', async (_req, res) => {
+    const orgs = await dbh.query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM organizations`)
+    res.json({ needsSetup: Number(orgs[0]?.cnt ?? 0) === 0 })
+  })
+
   /* --------------------------- Entitlements -------------------------------- */
 
   api.get('/entitlements', authRequired(dbh), async (req, res) => {
