@@ -4,6 +4,7 @@ import { Chip } from '@/components/base/badges/chip'
 import { Input } from '@/components/base/input/input'
 import { Select, SelectItem } from '@/components/base/select/select'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
+import logoDark from './assets/logos/logo-dark.png'
 import {
   AiBrain01Icon, ArrowLeft01Icon, ArrowRight02Icon, Calendar01Icon, CheckmarkCircle02Icon,
   HandshakeIcon, Search01Icon, RocketIcon, ShieldUserIcon,

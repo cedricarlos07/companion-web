@@ -48,7 +48,8 @@ async function main() {
 
   // API admin (x-admin-key).
   app.use('/admin', buildAdminApi(dbh))
-  // Portail client (session cookie).
+  // Portail client (session cookie) + ses assets (logos, polices).
+  app.use('/portal-assets', express.static(path.resolve('portal-assets')))
   app.use(buildPortal(dbh))
   // Landing + docs (build React design-system : npm run build:marketing → website/dist)
   // montés AVANT l'UI admin interne. En production : sous-domaines dédiés (nginx).

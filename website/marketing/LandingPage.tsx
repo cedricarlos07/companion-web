@@ -18,6 +18,8 @@ import riskImg from './assets/knowledge-risk.png'
 import handoversImg from './assets/handovers.png'
 import brainImg from './assets/brain.png'
 import approvalsImg from './assets/approvals.png'
+import logoDark from './assets/logos/logo-dark.png'
+import logoGreen from './assets/logos/logo-green.png'
 
 /* Surface marketing — companion.kamaloka.ai. Style bento (réf. lattice.com) :
  * chips d'icônes colorées, blobs de dégradé, bande sombre, apparitions au scroll. */
@@ -68,15 +70,6 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
   )
 }
 
-export function BrandMark({ size = 'md' }: { size?: 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'size-12 rounded-2xl' : 'size-10 rounded-xl'
-  return (
-    <span className={`${box} flex items-center justify-center bg-companion-300 shadow-card`}>
-      <HugeIcon icon={AiBrain01Icon} size={size === 'lg' ? 'lg' : 'md'} className="text-brand-black" />
-    </span>
-  )
-}
-
 function Header() {
   const [open, setOpen] = useState(false)
   const links: [string, string][] = [
@@ -89,11 +82,8 @@ function Header() {
   return (
     <header className="sticky top-0 z-30 border-b border-separator-border bg-background-primary-default/95 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
-        <a href="/" className="flex items-center gap-2.5 no-underline" onClick={() => setOpen(false)}>
-          <BrandMark />
-          <span className="text-headline-semibold text-text-primary">
-            COMPANION<span className="hidden text-text-tertiary lg:inline"> · by KamaLoka</span>
-          </span>
+        <a href="/" className="flex items-center no-underline" onClick={() => setOpen(false)} aria-label="Companion — accueil">
+          <img src={logoDark} alt="Companion" className="h-8 w-auto sm:h-9" />
         </a>
         <div className="ml-4 hidden items-center gap-5 lg:flex">
           {links.map(([href, label]) => (
@@ -679,7 +669,7 @@ export function LandingPage() {
       {/* 13 · CTA final */}
       <Section dark>
         <Reveal className="mx-auto max-w-3xl text-center">
-          <div className="flex justify-center"><BrandMark size="lg" /></div>
+          <img src={logoGreen} alt="Companion" className="mx-auto h-14 w-auto sm:h-16" />
           <h2 className="mt-6 font-medium text-white" style={{ fontSize: 'clamp(28px,4vw,42px)', lineHeight: 1.12 }}>
             Si une personne clé partait demain,<br />que perdriez-vous ?
           </h2>

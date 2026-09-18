@@ -128,9 +128,8 @@ button:hover{background:#0f2f6b}
 .err{color:#b42318;font-size:13px;margin-bottom:10px}
 .foot{margin-top:18px;font-size:12px;color:#98a2b3;text-align:center}
 </style></head><body>
-<div class="box"><div class="brand"><span class="mark">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#101828" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a4 4 0 0 0-4 4v1a3.5 3.5 0 0 0-1 6.8V16a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-1.2A3.5 3.5 0 0 0 16 8V7a4 4 0 0 0-4-4Z"/><path d="M12 3v18M9 11h6"/></svg>
-</span><div><h1 style="margin:0">Portail client KamaLoka</h1><p style="margin:2px 0 0">Companion — licences, téléchargements, factures</p></div></div>
+<div class="box"><div class="brand"><img src="/portal-assets/logo-dark.png" alt="Companion" style="height:30px;width:auto">
+<div><h1 style="margin:0">Portail client KamaLoka</h1><p style="margin:2px 0 0">Companion — licences, téléchargements, factures</p></div></div>
 ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}
 <form method="post" action="/portal/login"><label>Email<input name="email" type="email" required autofocus>
 </label><label>Mot de passe<input name="password" type="password" required></label>
@@ -306,9 +305,8 @@ ul.assets li svg{flex:none;color:#667085}
 .muted{color:#667085}.fine{font-size:12.5px;color:#667085}
 </style>`
     const downloadSvg = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M4 19h16"/></svg>'
-    const headerHtml = `<header><span class="brand"><span class="mark">
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101828" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a4 4 0 0 0-4 4v1a3.5 3.5 0 0 0-1 6.8V16a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-1.2A3.5 3.5 0 0 0 16 8V7a4 4 0 0 0-4-4Z"/><path d="M12 3v18M9 11h6"/></svg>
-</span><span class="lbl">KAMALOKA · Portail client</span></span>
+    const headerHtml = `<header><span class="brand"><img src="/portal-assets/logo-green.png" alt="Companion" style="height:22px;width:auto">
+<span class="lbl">· Portail client</span></span>
 <nav><a href="/docs">Documentation</a><a href="mailto:support@kamaloka.ai">Support</a></nav>
 <form method="post" action="/portal/logout" style="margin-left:auto"><button class="ghost" type="submit">Déconnexion</button></form></header>`
     const body = `${headerHtml}

@@ -18,6 +18,7 @@ function page(title: string, body: string, adminKey?: string): string {
     `<a href="${nav[i * 2]}${adminKey ? '' : ''}">${nav[i * 2 + 1]}</a>`).join('')
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/png" href="/portal-assets/logo-green.png">
 <title>KamaLoka Control — ${title}</title>
 <style>
   :root { color-scheme: light; }
@@ -48,7 +49,7 @@ function page(title: string, body: string, adminKey?: string): string {
   pre { background: #101828; color: #d1e9ff; padding: 12px; border-radius: 10px; overflow: auto; font-size: 12px; }
   .muted { color: #667085; }
 </style></head><body>
-<header><span class="brand">KAMALOKA · Control Center</span><nav>${navHtml}</nav>
+<header><img src="/portal-assets/logo-green.png" alt="KamaLoka" style="height:20px;width:auto"><span class="brand">Control Center</span><nav>${navHtml}</nav>
 <form method="post" action="/logout" style="margin-left:auto"><button class="ghost" type="submit">Quitter</button></form></header>
 <main>${body}</main></body></html>`
 }
