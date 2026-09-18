@@ -205,9 +205,10 @@ export function BillingPage() {
             </div>
           )}
           <p className="mt-4 border-t border-separator-border pt-3 text-caption-1-regular text-text-tertiary">
-            Aucune donnée métier n'est envoyée à KamaLoka : uniquement l'identifiant d'instance, la
-            version, le plan et des compteurs d'usage agrégés. Documents, emails, conversations et
-            mémoires d'entreprise ne quittent jamais votre instance.
+            Vos données restent chez vous. Companion envoie uniquement une télémétrie technique
+            minimale nécessaire à la licence, la sécurité et le support : identifiant d'instance,
+            version, statut de licence et compteurs d'usage agrégés. Aucun document, email,
+            conversation ou mémoire d'entreprise n'est transmis.
           </p>
         </Card>
 
