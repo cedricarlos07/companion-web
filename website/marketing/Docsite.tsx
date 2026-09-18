@@ -3,7 +3,7 @@ import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
 import { ButtonLink } from '@/components/base/buttons/button'
 import { Chip } from '@/components/base/badges/chip'
 import { ArrowLeft01Icon, ArrowRight02Icon } from '@/lib/icons'
-import logoDark from './assets/logos/logo-dark.png'
+import logoGreen from './assets/logos/logo-green.png'
 
 /* Documentation — docs.companion.kamaloka.ai. Design system Companion, aucun emoji. */
 
@@ -573,7 +573,7 @@ export function DocsPage() {
       <header className="sticky top-0 z-10 border-b border-separator-border bg-background-primary-default/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-5 px-5 py-2.5">
           <a href="/landing" className="flex items-center gap-3 no-underline">
-            <img src={logoDark} alt="Companion" className="h-7 w-auto" />
+            <img src={logoGreen} alt="Companion" className="h-7 w-auto" />
             <span className="text-body-2-medium text-text-tertiary">Documentation</span>
           </a>
           <a href="/landing" className="hidden text-body-2-medium text-text-secondary no-underline hover:text-text-primary sm:block">Site produit</a>

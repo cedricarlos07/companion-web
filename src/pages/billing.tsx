@@ -34,6 +34,9 @@ interface LicenseInfo {
   daysLeft?: number | null
   message?: string
   instanceId?: string
+  licensing?: 'connected' | 'offline'
+  lease?: { status: string; validUntil: string; daysLeft: number | null } | null
+  lastHeartbeatAt?: string | null
   error?: string
 }
 
@@ -157,6 +160,23 @@ export function BillingPage() {
               Instance <span className="tabular-nums">{license.instanceId}</span>
             </p>
           )}
+          {license?.licensing === 'connected' ? (
+            <p className="mt-1 text-caption-1-medium text-text-tertiary">
+              Licence connectée — renouvellement automatique
+              {license?.lease?.validUntil && (
+                <> · lease valide jusqu'au {new Date(license.lease.validUntil).toLocaleDateString('fr-FR')}</>
+              )}
+              {license?.lastHeartbeatAt && (
+                <> · dernier contact {new Date(license.lastHeartbeatAt).toLocaleString('fr-FR')}</>
+              )}
+            </p>
+          ) : (
+            license?.status !== 'not_configured' && (
+              <p className="mt-1 text-caption-1-medium text-text-tertiary">
+                Licence hors-ligne (Enterprise) — aucune connexion à KamaLoka requise.
+              </p>
+            )
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="secondary" size="small" onClick={() => setImportOpen((o) => !o)}>
               {importOpen ? 'Annuler' : 'Importer une licence'}
@@ -184,6 +204,11 @@ export function BillingPage() {
               </Button>
             </div>
           )}
+          <p className="mt-4 border-t border-separator-border pt-3 text-caption-1-regular text-text-tertiary">
+            Aucune donnée métier n'est envoyée à KamaLoka : uniquement l'identifiant d'instance, la
+            version, le plan et des compteurs d'usage agrégés. Documents, emails, conversations et
+            mémoires d'entreprise ne quittent jamais votre instance.
+          </p>
         </Card>
 
         {/* Mode de facturation IA */}

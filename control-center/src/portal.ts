@@ -140,7 +140,7 @@ button:hover{background:#b2ef70}
 </style></head><body>
 <div class="blob blob1"></div><div class="blob blob2"></div>
 <div class="box">
-<div class="brand"><img src="/portal-assets/logo-dark.png" alt="Companion"></div>
+<div class="brand"><img src="/portal-assets/logo-green.png" alt="Companion"></div>
 <h1>Portail client KamaLoka</h1>
 <p class="sub">Gérez votre licence, téléchargez les kits officiels et suivez vos factures Companion.</p>
 ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { DbHandle } from '../db/client.js'
 import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
+import { licenseGate } from '../services/license-mode.js'
 import { generateToken, hashToken } from './auth.js'
 import { mcpActiveSessions } from './http.js'
 
@@ -38,7 +39,8 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
     res.json({ clients: rows })
   })
 
-  router.post('/clients', ...guard, async (req, res) => {
+  /* Nouveau client MCP = nouvelle intégration : bloqué en mode restreint. */
+  router.post('/clients', licenseGate(dbh), ...guard, async (req, res) => {
     const { name, scopes, tools, expiresInDays } = req.body as {
       name?: string; scopes?: string[]; tools?: string[]; expiresInDays?: number
     }

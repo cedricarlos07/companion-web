@@ -559,6 +559,9 @@ export function buildApiRouter(dbh: DbHandle): Router {
       daysLeft: mode.daysLeft,
       message: mode.message,
       instanceId,
+      licensing: mode.licensing,
+      lease: mode.lease,
+      lastHeartbeatAt: mode.lastHeartbeatAt,
     })
   })
 
@@ -576,7 +579,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
       .query<{ id: string }>(`SELECT id FROM licenses WHERE license_key_hash = '${payload.licenseId.replace(/'/g, "''")}' AND organization_id = '${req.user!.organizationId}' ORDER BY created_at DESC LIMIT 1`)
       .catch(() => [])
 
-    const GRACE_DAYS = Math.max(0, Number(process.env.LICENSE_GRACE_DAYS ?? 30))
+    const GRACE_DAYS = Math.max(0, Number(process.env.LICENSE_GRACE_DAYS ?? 14))
     const graceUntil = payload.expiresAt
       ? new Date(new Date(payload.expiresAt).getTime() + GRACE_DAYS * 86_400_000).toISOString()
       : null
@@ -625,15 +628,30 @@ export function buildApiRouter(dbh: DbHandle): Router {
     res.json({ ok: true })
   })
 
-  /* Signature de test avec la paire éphémère de dev — 404 en production. */
+  /* Signature de test avec la paire éphémère de dev — 404 en production.
+   * Signe licences (payload nu) et leases (kind: 'companion-lease'). */
   api.post('/license/dev-sign', authRequired(dbh), requireRole('owner'), async (req, res) => {
     if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not found' })
-    const { devSignLicense } = await import('./services/licenses.js')
+    const { devSignLicense, devSignLease } = await import('./services/licenses.js')
+    const body = req.body as Record<string, unknown>
     try {
-      res.json({ license: devSignLicense(req.body as Parameters<typeof devSignLicense>[0]) })
+      if (body?.kind === 'companion-lease') {
+        return res.json({ lease: devSignLease(body as Parameters<typeof devSignLease>[0]) })
+      }
+      res.json({ license: devSignLicense(body as Parameters<typeof devSignLicense>[0]) })
     } catch (err) {
       res.status(400).json({ error: String(err).slice(0, 200) })
     }
+  })
+
+  /* Simule une réponse de heartbeat du Control Center ({status, lease}) :
+   * vérifie et stocke le lease exactement comme le ferait le vrai cycle —
+   * dev uniquement (404 en production). */
+  api.post('/license/dev-lease', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not found' })
+    const { storeLeaseFromResponse } = await import('./services/license-mode.js')
+    const body = req.body as { status?: string; lease?: string }
+    res.json(await storeLeaseFromResponse(dbh, req.user!.organizationId, body))
   })
 
   api.get('/billing/usage', authRequired(dbh), async (req, res) => {

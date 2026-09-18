@@ -83,7 +83,7 @@ function Header() {
     <header className="sticky top-0 z-30 border-b border-separator-border bg-background-primary-default/95 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
         <a href="/" className="flex items-center no-underline" onClick={() => setOpen(false)} aria-label="Companion — accueil">
-          <img src={logoDark} alt="Companion" className="h-8 w-auto sm:h-9" />
+          <img src={logoGreen} alt="Companion" className="h-9 w-auto sm:h-10" />
         </a>
         <div className="ml-4 hidden items-center gap-5 lg:flex">
           {links.map(([href, label]) => (

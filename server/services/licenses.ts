@@ -127,3 +127,67 @@ export async function checkLicenseStatus(dbh: DbHandle, organizationId: string):
   }
   return verification
 }
+
+/* ------------------------------- Lease ------------------------------------ */
+
+/**
+ * Lease signé renvoyé par le Control Center en réponse au heartbeat
+ * (licence connectée). Là où la licence file longue durée, le lease court
+ * (7 j par défaut côté serveur) : une révocation côté Kamaloka finit donc
+ * TOUJOURS par s'appliquer — au pire à l'expiration du lease en cours,
+ * jamais par kill brutal. Le client ne peut pas en forger : la clé privée
+ * ne quitte jamais Kamaloka, seule la public key est embarquée ici.
+ */
+export interface LeasePayload {
+  kind: 'companion-lease'
+  licenseId: string
+  instanceId: string
+  plan: string
+  status: 'ACTIVE' | 'GRACE'
+  entitlements: Record<string, unknown>
+  issuedAt: string
+  validUntil: string
+}
+
+export interface LeaseVerification {
+  valid: boolean
+  status: 'active' | 'expired' | 'invalid' | 'not_configured'
+  payload?: LeasePayload
+  error?: string
+}
+
+/** Signe un lease (côté éditeur / Control Center uniquement). */
+export function signLease(payload: LeasePayload, privateKeyPem: string): string {
+  const data = JSON.stringify(payload)
+  const signature = crypto.sign(null, Buffer.from(data), privateKeyPem)
+  return Buffer.from(JSON.stringify({ payload, signature: signature.toString('base64') })).toString('base64')
+}
+
+/** Signature de lease avec la paire éphémère de dev — jamais en production. */
+export function devSignLease(payload: LeasePayload): string {
+  if (!DEV_KEYS) throw new Error('devSignLease indisponible : LICENSE_PUBLIC_KEY est configurée')
+  const pem = DEV_KEYS.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+  return signLease(payload, pem)
+}
+
+/** Vérifie un lease signé localement (signature + validUntil). */
+export function verifyLease(encoded: string): LeaseVerification {
+  if (!ACTIVE_PUBLIC_KEY) {
+    return { valid: false, status: 'not_configured', error: 'LICENSE_PUBLIC_KEY non configurée' }
+  }
+  try {
+    const { payload, signature } = JSON.parse(Buffer.from(encoded, 'base64').toString())
+    if (payload?.kind !== 'companion-lease') {
+      return { valid: false, status: 'invalid', error: 'payload lease invalide' }
+    }
+    const data = JSON.stringify(payload)
+    const valid = crypto.verify(null, Buffer.from(data), ACTIVE_PUBLIC_KEY, Buffer.from(signature, 'base64'))
+    if (!valid) return { valid: false, status: 'invalid', error: 'signature de lease invalide' }
+    if (payload.validUntil && new Date(payload.validUntil) < new Date()) {
+      return { valid: false, status: 'expired', payload, error: `lease expiré le ${payload.validUntil}` }
+    }
+    return { valid: true, status: 'active', payload }
+  } catch (err) {
+    return { valid: false, status: 'invalid', error: String(err).slice(0, 200) }
+  }
+}
