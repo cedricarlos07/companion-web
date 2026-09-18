@@ -32,25 +32,30 @@ export function buildSetupRouter(dbh: DbHandle): Router {
 
     // Organisation
     await dbh.exec(
-      `INSERT INTO organizations (name, slug, sector, country) VALUES ('${orgName.replace(/'/g, "''")}', '${orgName.toLowerCase().replace(/[^a-z0-9]/g, '-')}', '${(sector ?? '').replace(/'/g, "''")}', '${(country ?? '').replace(/'/g, "''")}')`,
+      `INSERT INTO organizations (name, slug, sector, country) VALUES ($1, $2, $3, $4)`,
+      [orgName, orgName.toLowerCase().replace(/[^a-z0-9]/g, '-'), sector ?? '', country ?? ''],
     )
     const org = (await dbh.query<{ id: string }>(`SELECT id FROM organizations ORDER BY created_at LIMIT 1`))[0]
 
     // Département
     const dept = departmentName || 'Général'
-    await dbh.exec(`INSERT INTO departments (organization_id, name) VALUES ('${org.id}', '${dept.replace(/'/g, "''")}')`)
-    const deptId = (await dbh.query<{ id: string }>(`SELECT id FROM departments WHERE organization_id = '${org.id}' LIMIT 1`))[0]?.id
+    await dbh.exec(`INSERT INTO departments (organization_id, name) VALUES ($1, $2)`, [org.id, dept])
+    const deptId = (await dbh.query<{ id: string }>(`SELECT id FROM departments WHERE organization_id = $1::uuid LIMIT 1`, [org.id]))[0]?.id
 
     // Rôle
     const role = roleName || 'Directeur'
-    await dbh.exec(`INSERT INTO roles (organization_id, department_id, title) VALUES ('${org.id}', ${deptId ? `'${deptId}'` : 'NULL'}, '${role.replace(/'/g, "''")}')`)
-    const roleId = (await dbh.query<{ id: string }>(`SELECT id FROM roles WHERE organization_id = '${org.id}' LIMIT 1`))[0]?.id
+    await dbh.exec(
+      `INSERT INTO roles (organization_id, department_id, title) VALUES ($1, $2, $3)`,
+      [org.id, deptId ?? null, role],
+    )
+    const roleId = (await dbh.query<{ id: string }>(`SELECT id FROM roles WHERE organization_id = $1::uuid LIMIT 1`, [org.id]))[0]?.id
 
     // Owner
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.hash(ownerPassword, 10)
     await dbh.exec(
-      `INSERT INTO users (organization_id, email, password_hash, name, app_role) VALUES ('${org.id}', '${ownerEmail.replace(/'/g, "''")}', '${hash}', '${(ownerFirstName || 'Admin').replace(/'/g, "''")} ${(ownerLastName || '').replace(/'/g, "''")}', 'owner')`,
+      `INSERT INTO users (organization_id, email, password_hash, name, app_role) VALUES ($1, $2, $3, $4, 'owner')`,
+      [org.id, ownerEmail, hash, `${ownerFirstName || 'Admin'} ${ownerLastName || ''}`.trim()],
     )
 
     res.json({ ok: true, organizationId: org.id, message: 'Organisation créée. Redémarrez Companion pour le seed des données de démonstration.' })

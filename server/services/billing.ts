@@ -46,7 +46,7 @@ const RATES: Record<string, number> = {
 export async function getUsageReport(dbh: DbHandle, organizationId: string): Promise<UsageReport> {
   const ent = await getEntitlements(dbh, organizationId)
   const planRows = await dbh
-    .query<{ plan: string }>(`SELECT plan FROM org_entitlements WHERE organization_id = '${organizationId}'`)
+    .query<{ plan: string }>(`SELECT plan FROM org_entitlements WHERE organization_id = $1::uuid`, [organizationId])
     .catch(() => [])
   const plan = planRows[0]?.plan ?? 'pilot'
 
@@ -57,14 +57,14 @@ export async function getUsageReport(dbh: DbHandle, organizationId: string): Pro
       tokens: string; documents: string; storage_bytes: string; whatsapp: string;
     }>(
       `SELECT
-        (SELECT count(*) FROM users WHERE organization_id = '${organizationId}')::text AS users,
-        (SELECT count(*) FROM agents WHERE organization_id = '${organizationId}' AND status != 'paused')::text AS agents,
-        (SELECT count(*) FROM sources WHERE organization_id = '${organizationId}' AND status = 'connected')::text AS integrations,
-        (SELECT count(*) FROM mcp_clients WHERE organization_id = '${organizationId}' AND status = 'active')::text AS mcp_clients,
-        (SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) FROM agent_runs WHERE organization_id = '${organizationId}')::text AS tokens,
-        (SELECT count(*) FROM documents WHERE organization_id = '${organizationId}')::text AS documents,
-        (SELECT COALESCE(SUM(size_bytes), 0) FROM documents WHERE organization_id = '${organizationId}')::text AS storage_bytes,
-        (SELECT count(*) FROM memories WHERE organization_id = '${organizationId}' AND contributor LIKE '%whatsapp%')::text AS whatsapp`,
+        (SELECT count(*) FROM users WHERE organization_id = $1::uuid)::text AS users,
+        (SELECT count(*) FROM agents WHERE organization_id = $2::uuid AND status != 'paused')::text AS agents,
+        (SELECT count(*) FROM sources WHERE organization_id = $3::uuid AND status = 'connected')::text AS integrations,
+        (SELECT count(*) FROM mcp_clients WHERE organization_id = $4::uuid AND status = 'active')::text AS mcp_clients,
+        (SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) FROM agent_runs WHERE organization_id = $5::uuid)::text AS tokens,
+        (SELECT count(*) FROM documents WHERE organization_id = $6::uuid)::text AS documents,
+        (SELECT COALESCE(SUM(size_bytes), 0) FROM documents WHERE organization_id = $7::uuid)::text AS storage_bytes,
+        (SELECT count(*) FROM memories WHERE organization_id = $8::uuid AND contributor LIKE '%whatsapp%')::text AS whatsapp`, [organizationId, organizationId, organizationId, organizationId, organizationId, organizationId, organizationId, organizationId],
     )
     .catch(() => [{ users: '0', agents: '0', integrations: '0', mcp_clients: '0', tokens: '0', documents: '0', storage_bytes: '0', whatsapp: '0' }])
 
@@ -121,7 +121,7 @@ export async function isPlanLimitReached(
   if (!table) return false
 
   const rows = await dbh
-    .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM ${table} WHERE organization_id = '${organizationId}'`)
+    .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM $1 WHERE organization_id = $2::uuid`, [table, organizationId])
     .catch(() => [])
   return Number(rows[0]?.cnt ?? 0) >= max
 }

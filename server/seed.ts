@@ -449,8 +449,8 @@ export async function seedDatabase(dbh: DbHandle) {
     await dbh.exec(`
       INSERT INTO memories (organization_id, type, title, content, scope, employee_id, role_id, department_id,
         status, confidence, importance, valid_from, contributor, origin, human_validated, embedding, embedding_provider, created_at, updated_at)
-      VALUES ${values.join(',')}
-    `)
+      VALUES $1
+    `, [values.join(',')])
     generated += batch.length
   }
 

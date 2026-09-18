@@ -20,35 +20,66 @@ export interface MemoryActor {
 
 const PRIVILEGED = new Set(['owner', 'admin', 'manager', 'auditor'])
 
-export function memoryAccessClause(actor: MemoryActor | null, organizationId: string): string {
+export interface SqlFragment {
+  /** SQL text — placeholders $n already offset according to `startAt`. */
+  text: string
+  params: unknown[]
+}
+
+/**
+ * Clause d'accès mémoire paramétrée. Les placeholders commencent à `startAt`
+ * pour se composer avec le reste de la requête : le consommateur écrit son
+ * SQL en décalant ses propres placeholders après `fragment.params.length`.
+ */
+export function memoryAccessClause(actor: MemoryActor | null, organizationId: string, startAt = 1): SqlFragment {
   void organizationId
-  if (!actor) return 'TRUE'
+  let n = startAt - 1
+  const next = () => `$${++n}`
+
+  if (!actor) return { text: 'TRUE', params: [] }
 
   if (actor.kind === 'agent') {
     const scopes = actor.memoryScopes ?? []
-    if (scopes.includes('*')) return 'TRUE'
+    if (scopes.includes('*')) return { text: 'TRUE', params: [] }
     const clauses: string[] = []
+    const params: unknown[] = []
     for (const grant of scopes) {
       if (grant === 'company') clauses.push(`m.scope = 'company'`)
       else if (grant === 'role') clauses.push(`m.scope = 'role'`)
       else if (grant === 'department') clauses.push(`m.scope = 'department'`)
-      else if (grant === 'employee:own')
-        clauses.push(`(m.scope = 'employee' AND m.employee_id = '${actor.employeeId ?? '__none__'}')`)
-      else if (grant.startsWith('role:'))
-        clauses.push(`(m.scope = 'role' AND m.role_id IN (SELECT id FROM roles WHERE title = '${grant.slice(4).replace(/'/g, "''")}'))`)
-      else if (grant.startsWith('department:'))
-        clauses.push(`(m.scope = 'department' AND m.department_id IN (SELECT id FROM departments WHERE name = '${grant.slice(11).replace(/'/g, "''")}'))`)
+      else if (grant === 'employee:own') {
+        params.push(actor.employeeId ?? '__none__')
+        clauses.push(`(m.scope = 'employee' AND m.employee_id = ${next()})`)
+      } else if (grant.startsWith('role:')) {
+        params.push(grant.slice(5))
+        clauses.push(`(m.scope = 'role' AND m.role_id IN (SELECT id FROM roles WHERE title = ${next()}))`)
+      } else if (grant.startsWith('department:')) {
+        params.push(grant.slice(11))
+        clauses.push(`(m.scope = 'department' AND m.department_id IN (SELECT id FROM departments WHERE name = ${next()}))`)
+      }
     }
     // Les agents voient aussi les mémoires dont ils sont propriétaires.
-    if (actor.employeeId) clauses.push(`m.employee_id = '${actor.employeeId}'`)
-    return clauses.length > 0 ? `(${clauses.join(' OR ')})` : 'FALSE'
+    if (actor.employeeId) {
+      params.push(actor.employeeId)
+      clauses.push(`m.employee_id = ${next()}`)
+    }
+    return clauses.length > 0
+      ? { text: `(${clauses.join(' OR ')})`, params }
+      : { text: 'FALSE', params: [] }
   }
 
   // Utilisateurs : les rôles privilégiés voient toute l'organisation.
-  if (actor.appRole && PRIVILEGED.has(actor.appRole)) return 'TRUE'
+  if (actor.appRole && PRIVILEGED.has(actor.appRole)) return { text: 'TRUE', params: [] }
   // Employé simple : ses propres mémoires + scopes partagés de son périmètre.
   const clauses: string[] = [`m.scope = 'company'`]
-  if (actor.employeeId) clauses.push(`m.employee_id = '${actor.employeeId}'`)
-  if (actor.departmentId) clauses.push(`m.department_id = '${actor.departmentId}'`)
-  return `(${clauses.join(' OR ')})`
+  const params: unknown[] = []
+  if (actor.employeeId) {
+    params.push(actor.employeeId)
+    clauses.push(`m.employee_id = ${next()}`)
+  }
+  if (actor.departmentId) {
+    params.push(actor.departmentId)
+    clauses.push(`m.department_id = ${next()}`)
+  }
+  return { text: `(${clauses.join(' OR ')})`, params }
 }

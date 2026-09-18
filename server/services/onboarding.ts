@@ -26,7 +26,7 @@ export async function generateOnboarding(
   actorName: string,
 ) {
   const emp = await dbh.query<{ first_name: string; last_name: string; role_id: string | null }>(
-    `SELECT first_name, last_name, role_id FROM employees WHERE id = '${employeeId}' AND organization_id = '${organizationId}'`,
+    `SELECT first_name, last_name, role_id FROM employees WHERE id = $1::uuid AND organization_id = $2::uuid`, [employeeId, organizationId],
   )
   const employee = emp[0]
   if (!employee) throw new Error('employé introuvable')
@@ -34,15 +34,15 @@ export async function generateOnboarding(
   const roleId = employee.role_id
 
   const roleTitle = roleId
-    ? (await dbh.query<{ title: string }>(`SELECT title FROM roles WHERE id = '${roleId}'`))[0]?.title ?? ''
+    ? (await dbh.query<{ title: string }>(`SELECT title FROM roles WHERE id = $1::uuid`, [roleId]))[0]?.title ?? ''
     : ''
 
   // Role Brain durable knowledge
   const roleMemories = roleId
     ? await dbh.query<{ id: string; type: string; title: string; content: string }>(
         `SELECT id, type, title, content FROM memories
-         WHERE role_id = '${roleId}' AND scope IN ('role', 'company') AND status IN ('active', 'verified')
-         ORDER BY importance DESC LIMIT 30`,
+         WHERE role_id = $1::uuid AND scope IN ('role', 'company') AND status IN ('active', 'verified')
+         ORDER BY importance DESC LIMIT 30`, [roleId],
       )
     : []
 
@@ -51,9 +51,9 @@ export async function generateOnboarding(
     ? await dbh.query<{ id: string; type: string; title: string; content: string; contributor: string | null }>(
         `SELECT m.id, m.type, m.title, m.content, m.contributor FROM memories m
          JOIN handover_answers ha ON ha.produced_memory_id = m.id
-         WHERE ha.handover_id = '${handoverId}'
+         WHERE ha.handover_id = $1::uuid
          GROUP BY m.id, m.type, m.title, m.content, m.contributor, m.importance
-         ORDER BY m.importance DESC LIMIT 12`,
+         ORDER BY m.importance DESC LIMIT 12`, [handoverId],
       )
     : []
 
@@ -161,8 +161,9 @@ export async function generateOnboarding(
     roleId
       ? `SELECT e.first_name || ' ' || e.last_name AS name, r.title AS role
          FROM employees e LEFT JOIN roles r ON r.id = e.role_id
-         WHERE e.role_id = '${roleId}' AND e.id <> '${employeeId}' AND e.status <> 'former' LIMIT 4`
+         WHERE e.role_id = $1::uuid AND e.id <> $2 AND e.status <> 'former' LIMIT 4`
       : `SELECT '' AS name, '' AS role LIMIT 0`,
+    roleId ? [roleId, employeeId] : [],
   )
   if (people.length > 0) {
     sections.splice(5, 0, {

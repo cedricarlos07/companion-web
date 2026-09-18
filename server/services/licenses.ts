@@ -113,8 +113,8 @@ export async function checkLicenseStatus(dbh: DbHandle, organizationId: string):
   const rows = await dbh
     .query<{ signature: string; status: string; grace_until: string | null }>(
       `SELECT signature, status, grace_until FROM licenses
-       WHERE organization_id = '${organizationId}' AND status NOT IN ('revoked', 'replaced')
-       ORDER BY created_at DESC LIMIT 1`,
+       WHERE organization_id = $1::uuid AND status NOT IN ('revoked', 'replaced')
+       ORDER BY created_at DESC LIMIT 1`, [organizationId],
     )
     .catch(() => [])
   if (!rows[0]) {

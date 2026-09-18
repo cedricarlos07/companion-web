@@ -12,11 +12,11 @@ export async function runMigrations(dbh: DbHandle) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
   for (const file of files) {
     const applied = await dbh.query<{ name: string }>(
-      `SELECT name FROM _migrations WHERE name = '${file}'`,
+      `SELECT name FROM _migrations WHERE name = $1`, [file],
     )
     if (applied.length > 0) continue
     const sqlContent = fs.readFileSync(path.join(dir, file), 'utf8')
     await dbh.exec(sqlContent)
-    await dbh.exec(`INSERT INTO _migrations (name) VALUES ('${file}')`)
+    await dbh.exec(`INSERT INTO _migrations (name) VALUES ($1)`, [file])
   }
 }

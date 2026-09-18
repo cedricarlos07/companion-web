@@ -196,6 +196,78 @@ async function main() {
   const fake = await api('/license/import', { method: 'POST', cookie, body: { license: Buffer.from(JSON.stringify({ payload: { licenseId: 'FAKE' }, signature: 'AAAA' })).toString('base64') } })
   step('B10 — licence falsifiée refusée à l\'import', fake.status === 400, `status=${fake.status}`)
 
+  /* --------------- C — Lease signé (licence connectée) -------------------- */
+
+  /* Nécessite un serveur démarré avec LICENSE_SERVER_URL (mode connecté) et
+   * LICENSE_PUBLIC_KEY absente (dev : signature via la paire éphémère — les
+   * leases n'ont pas d'oracle Control Center dans ce test). */
+  const licensing = (await api('/license', { cookie })).data?.licensing
+  if (licensing !== 'connected') {
+    step('C0 — serveur en licence connectée (LICENSE_SERVER_URL)', true, 'SKIP : serveur offline, série lease ignorée')
+  } else {
+    // Licence valide longue durée : en mode connecté, c'est le lease qui gouverne.
+    const leaseLic = await signTestLicense(`LIC-TEST-LEASE-${now}`, 'business', new Date(now + 365 * 86_400_000).toISOString(), cookie)
+    await api('/license/import', { method: 'POST', cookie, body: { license: leaseLic } })
+    const leaseInstanceId = (await api('/license', { cookie })).data?.instanceId
+
+    const signTestLease = async (validUntil, status = 'ACTIVE', forInstance = leaseInstanceId) => {
+      const dev = await api('/license/dev-sign', {
+        method: 'POST', cookie,
+        body: {
+          kind: 'companion-lease', licenseId: `LIC-TEST-LEASE-${now}`, instanceId: forInstance,
+          plan: 'business', status, entitlements: {}, issuedAt: new Date().toISOString(), validUntil,
+        },
+      })
+      return dev.status === 200 ? dev.data?.lease : null
+    }
+    const pushLease = (lease, status = 'ACTIVE') =>
+      api('/license/dev-lease', { method: 'POST', cookie, body: { status, lease } })
+
+    /* C1 — lease ACTIF renouvelé → mode active, lease + dernier contact exposés. */
+    await pushLease(await signTestLease(new Date(now + 7 * 86_400_000).toISOString()))
+    let l = await api('/license', { cookie })
+    step(
+      'C1 — lease actif → mode active + lease exposé',
+      l.data?.mode === 'active' && l.data?.lease?.status === 'ACTIVE' && Boolean(l.data?.lastHeartbeatAt),
+      `mode=${l.data?.mode} lease=${l.data?.lease?.daysLeft}j`,
+    )
+
+    /* C2 — lease expiré récemment → grâce (jamais de kill brutal). */
+    await pushLease(await signTestLease(new Date(now - 2 * 86_400_000).toISOString()))
+    l = await api('/license', { cookie })
+    step('C2 — lease expiré (-2 j) → grace', l.data?.mode === 'grace', `mode=${l.data?.mode}`)
+
+    /* C3 — lease expiré au-delà de la grâce (30 j) → restricted. */
+    await pushLease(await signTestLease(new Date(now - 40 * 86_400_000).toISOString()))
+    l = await api('/license', { cookie })
+    step('C3 — lease expiré (-40 j, grâce 30 j dépassée) → restricted', l.data?.mode === 'restricted', `mode=${l.data?.mode}`)
+
+    /* C4 — restricted (lease) : création bloquée, lecture libre. */
+    const invC = await api('/invitations', { method: 'POST', cookie, body: { email: 'lease@test.ci', role: 'employee' } })
+    const memC = await api('/memories', { cookie })
+    step('C4 — restricted (lease) : invitation 402, lecture libre', invC.status === 402 && memC.status === 200, `invitation=${invC.status} lecture=${memC.status}`)
+
+    /* C5 — bind instance : un lease signé pour une autre instance est refusé.
+     * Ré-import d'une licence fraîche pour repartir d'un état actif (bootstrap). */
+    const freshLic = await signTestLicense(`LIC-TEST-LEASE2-${now}`, 'business', new Date(now + 365 * 86_400_000).toISOString(), cookie)
+    await api('/license/import', { method: 'POST', cookie, body: { license: freshLic } })
+    const wrongInstance = await pushLease(await signTestLease(new Date(now + 7 * 86_400_000).toISOString(), 'ACTIVE', 'cmp_inst_autre000'))
+    l = await api('/license', { cookie })
+    step(
+      'C5 — lease d\'une autre instance refusé (bind instanceId)',
+      wrongInstance.data?.stored === false && l.data?.mode === 'active',
+      `stored=${wrongInstance.data?.stored} mode=${l.data?.mode}`,
+    )
+
+    /* C6 — renouvellement : un nouveau lease valide restaure le service. */
+    await pushLease(await signTestLease(new Date(now + 7 * 86_400_000).toISOString()))
+    l = await api('/license', { cookie })
+    step('C6 — lease renouvelé → retour en active', l.data?.mode === 'active', `mode=${l.data?.mode}`)
+
+    /* Cleanup : retour à l'essai pour les séquences suivantes. */
+    await api('/license', { method: 'DELETE', cookie })
+  }
+
   /* ---------------------------- SYNTHÈSE --------------------------------- */
 
   const failed = results.filter((r) => !r.ok)

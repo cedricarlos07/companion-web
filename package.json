@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run check:sql && tsc --noEmit && vite build",
+    "check:sql": "node scripts/check-sql.mjs",
     "build:marketing": "vite build --config vite.marketing.config.ts",
     "preview": "vite preview",
     "dev:server": "tsx server/index.ts",

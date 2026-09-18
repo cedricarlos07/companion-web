@@ -46,7 +46,7 @@ export function buildHandoverWorkflow() {
       await record(inputData.runId, 'get_employee_context', { employeeId: inputData.employeeId }, out as never)
       const ctx = getRunContext(inputData.runId)
       const count = await ctx.dbh.query<{ cnt: string }>(
-        `SELECT count(*)::text AS cnt FROM memories WHERE employee_id = '${inputData.employeeId}'`,
+        `SELECT count(*)::text AS cnt FROM memories WHERE employee_id = $1::uuid`, [inputData.employeeId],
       )
       return {
         runId: inputData.runId,
@@ -74,14 +74,14 @@ export function buildHandoverWorkflow() {
         await record(inputData.runId, 'create_handover', { employeeId: inputData.employeeId }, out as never)
         handoverId = out.handoverId
         const gaps = await ctx.dbh.query<{ question: string }>(
-          `SELECT question FROM handover_gaps WHERE handover_id = '${handoverId}' ORDER BY created_at`,
+          `SELECT question FROM handover_gaps WHERE handover_id = $1::uuid ORDER BY created_at`, [handoverId],
         )
         // SUSPEND : attente des réponses d'entretien de l'employé (HITL).
         await suspend({ reason: 'waiting_interview', handoverId, questions: gaps.map((g) => g.question) })
       }
 
       const gaps = await ctx.dbh.query<{ id: string; question: string; status: string }>(
-        `SELECT id, question, status FROM handover_gaps WHERE handover_id = '${handoverId}' ORDER BY created_at`,
+        `SELECT id, question, status FROM handover_gaps WHERE handover_id = $1::uuid ORDER BY created_at`, [handoverId],
       )
       return {
         runId: inputData.runId,
@@ -242,7 +242,7 @@ export function buildResolveContradictionWorkflow() {
     execute: async ({ inputData }) => {
       const ctx = getRunContext(inputData.runId)
       const rows = await ctx.dbh.query<{ id: string; title: string; version: number }>(
-        `SELECT id, title, version FROM memories WHERE id = '${inputData.memoryId}'`,
+        `SELECT id, title, version FROM memories WHERE id = $1::uuid`, [inputData.memoryId],
       )
       return {
         runId: inputData.runId,
@@ -345,8 +345,8 @@ export function buildCaptureKnowledgeWorkflow() {
       if (!inputData.documentId) return { runId: inputData.runId, analyzed: false, documents: 0 }
       const ctx = getRunContext(inputData.runId)
       const rows = await ctx.dbh.query<{ status: string; count: string }>(
-        `SELECT (SELECT status FROM documents WHERE id = '${inputData.documentId}') AS status,
-                (SELECT count(*) FROM memories m JOIN memory_sources ms ON ms.memory_id = m.id WHERE ms.document_id = '${inputData.documentId}')::text AS count`,
+        `SELECT (SELECT status FROM documents WHERE id = $1::uuid) AS status,
+                (SELECT count(*) FROM memories m JOIN memory_sources ms ON ms.memory_id = m.id WHERE ms.document_id = $2::uuid)::text AS count`, [inputData.documentId, inputData.documentId],
       )
       return { runId: inputData.runId, analyzed: rows[0]?.status === 'done', documents: Number(rows[0]?.count ?? 0) }
     },

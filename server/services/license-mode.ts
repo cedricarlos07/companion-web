@@ -28,7 +28,7 @@ import { verifyLicense, verifyLease, type LicensePayload, type LeasePayload } fr
 
 export type LicenseMode = 'active' | 'grace' | 'restricted'
 
-const GRACE_DAYS = Math.max(0, Number(process.env.LICENSE_GRACE_DAYS ?? 14))
+const GRACE_DAYS = Math.max(0, Number(process.env.LICENSE_GRACE_DAYS ?? 30))
 /** Fenêtre attendue entre deux leases — sert au bootstrap et aux messages. */
 const LEASE_DAYS = Math.max(1, Number(process.env.LICENSE_LEASE_DAYS ?? 7))
 
@@ -53,15 +53,15 @@ export interface LicenseModeInfo {
 /** Identifiant d'instance stable (cmp_inst_…), persisté dans settings. */
 export async function getInstanceId(dbh: DbHandle, organizationId: string): Promise<string> {
   const rows = await dbh
-    .query<{ value: unknown }>(`SELECT value FROM settings WHERE organization_id = '${organizationId}' AND key = 'instance'`)
+    .query<{ value: unknown }>(`SELECT value FROM settings WHERE organization_id = $1::uuid AND key = 'instance'`, [organizationId])
     .catch(() => [])
   const existing = rows[0]?.value as { instanceId?: string } | undefined
   if (existing?.instanceId) return existing.instanceId
   const instanceId = `cmp_inst_${crypto.randomBytes(8).toString('hex')}`
   await dbh
     .exec(
-      `INSERT INTO settings (organization_id, key, value) VALUES ('${organizationId}', 'instance', '${JSON.stringify({ instanceId, createdAt: new Date().toISOString() })}'::jsonb)
-       ON CONFLICT (organization_id, key) DO UPDATE SET value = '${JSON.stringify({ instanceId, createdAt: new Date().toISOString() })}'::jsonb, updated_at = now()`,
+      `INSERT INTO settings (organization_id, key, value) VALUES ($1, 'instance', $2::jsonb)
+       ON CONFLICT (organization_id, key) DO UPDATE SET value = $3::jsonb, updated_at = now()`, [organizationId, JSON.stringify({ instanceId, createdAt: new Date().toISOString() }), JSON.stringify({ instanceId, createdAt: new Date().toISOString() })],
     )
     .catch(() => {})
   return instanceId
@@ -77,17 +77,18 @@ interface StoredLease {
 
 async function readStoredLease(dbh: DbHandle, organizationId: string): Promise<StoredLease | null> {
   const rows = await dbh
-    .query<{ value: unknown }>(`SELECT value FROM settings WHERE organization_id = '${organizationId}' AND key = 'license-lease'`)
+    .query<{ value: unknown }>(`SELECT value FROM settings WHERE organization_id = $1::uuid AND key = 'license-lease'`, [organizationId])
     .catch(() => [])
   return (rows[0]?.value as StoredLease | undefined) ?? null
 }
 
 async function writeStoredLease(dbh: DbHandle, organizationId: string, lease: StoredLease): Promise<void> {
-  const json = JSON.stringify(lease).replace(/'/g, "''")
+  // Paramètre jsonb : le JSON brut passe tel quel, sans échappement SQL.
+  const json = JSON.stringify(lease)
   await dbh
     .exec(
-      `INSERT INTO settings (organization_id, key, value) VALUES ('${organizationId}', 'license-lease', '${json}'::jsonb)
-       ON CONFLICT (organization_id, key) DO UPDATE SET value = '${json}'::jsonb, updated_at = now()`,
+      `INSERT INTO settings (organization_id, key, value) VALUES ($1, 'license-lease', $2::jsonb)
+       ON CONFLICT (organization_id, key) DO UPDATE SET value = $3::jsonb, updated_at = now()`, [organizationId, json, json],
     )
     .catch(() => {})
 }
@@ -157,8 +158,8 @@ export async function getLicenseMode(dbh: DbHandle, organizationId: string): Pro
   const rows = await dbh
     .query<{ signature: string; status: string; grace_until: string | null }>(
       `SELECT signature, status, grace_until FROM licenses
-       WHERE organization_id = '${organizationId}' AND status NOT IN ('revoked', 'replaced')
-       ORDER BY created_at DESC LIMIT 1`,
+       WHERE organization_id = $1::uuid AND status NOT IN ('revoked', 'replaced')
+       ORDER BY created_at DESC LIMIT 1`, [organizationId],
     )
     .catch(() => [])
 
@@ -324,15 +325,21 @@ export async function firstOrganizationId(dbh: DbHandle): Promise<string | null>
 /* ---------------------------- heartbeat ---------------------------------- */
 
 const HEARTBEAT_URL = process.env.LICENSE_SERVER_URL ?? ''
-const HEARTBEAT_INTERVAL_MS = Math.max(6, Math.min(24, Number(process.env.LICENSE_HEARTBEAT_HOURS ?? 12))) * 60 * 60 * 1000
+const HEARTBEAT_INTERVAL_MS = Math.max(6, Math.min(24, Number(process.env.LICENSE_HEARTBEAT_HOURS ?? 24))) * 60 * 60 * 1000
 
 /**
- * Licence connectée (offre standard) : heartbeat périodique vers le control
+ * Licence connectée (offre standard) : heartbeat quotidien vers le control
  * plane Kamaloka, qui répond {status, lease} — lease signé Ed25519 lié à
- * l'instance, renouvelé à chaque contact. N'envoie QUE des métadonnées
- * opérationnelles — jamais de mémoires, documents, emails ou conversations.
- * Best-effort : un échec n'a aucun impact produit (le lease en cours continue
- * de courir).
+ * l'instance, renouvelé à chaque contact. Best-effort : un échec n'a aucun
+ * impact produit (le lease en cours continue de courir).
+ *
+ * Principe de confidentialité — trois couches jamais mélangées :
+ *   1. Télémétrie de licence (CE heartbeat) : obligatoire, purement technique
+ *      (identifiants, version, statut, compteurs agrégés, santé). Aucune
+ *      donnée métier : pas de documents, emails, mémoires, prompts, réponses.
+ *   2. Données d'amélioration produit : OPT-IN séparé — délibérément non
+ *      implémenté ici.
+ *   3. Données d'entraînement de modèles : OPT-IN explicite séparé — jamais.
  */
 export function startLicenseHeartbeat(dbh: DbHandle, version: string): void {
   if (!HEARTBEAT_URL) return
@@ -345,29 +352,36 @@ export function startLicenseHeartbeat(dbh: DbHandle, version: string): void {
       const instanceId = await getInstanceId(dbh, orgId)
       const rows = await dbh
         .query<{ signature: string }>(
-          `SELECT signature FROM licenses WHERE organization_id = '${orgId}' AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+          `SELECT signature FROM licenses WHERE organization_id = $1::uuid AND status = 'active' ORDER BY created_at DESC LIMIT 1`, [orgId],
         )
         .catch(() => [])
       const licenseFile = rows[0]?.signature
       if (!licenseFile) return
       const counts = await dbh
-        .query<{ users: string; agents: string; integrations: string }>(
+        .query<{ users: string; agents: string; integrations: string; mcp: string }>(
           `SELECT
-            (SELECT count(*) FROM users WHERE organization_id = '${orgId}')::text AS users,
-            (SELECT count(*) FROM agents WHERE organization_id = '${orgId}' AND status != 'paused')::text AS agents,
-            (SELECT count(*) FROM sources WHERE organization_id = '${orgId}' AND status = 'connected')::text AS integrations`,
+            (SELECT count(*) FROM users WHERE organization_id = $1::uuid)::text AS users,
+            (SELECT count(*) FROM agents WHERE organization_id = $2::uuid AND status != 'paused')::text AS agents,
+            (SELECT count(*) FROM sources WHERE organization_id = $3::uuid AND status = 'connected')::text AS integrations,
+            (SELECT count(*) FROM mcp_clients WHERE organization_id = $4::uuid AND status = 'active')::text AS mcp`, [orgId, orgId, orgId, orgId],
         )
         .catch(() => [])
+      // Télémétrie technique minimale — compteurs agrégés et santé, jamais de
+      // contenu (voir le principe des trois couches ci-dessus).
       const base = {
         licenseId: info.licenseId,
         instanceId,
         version,
         mode: info.mode,
+        plan: info.plan,
         counts: {
           users: Number(counts[0]?.users ?? 0),
           agents: Number(counts[0]?.agents ?? 0),
           integrations: Number(counts[0]?.integrations ?? 0),
+          mcpClients: Number(counts[0]?.mcp ?? 0),
         },
+        health: { db: 'ok' },
+        licenseCheckedAt: new Date().toISOString(),
       }
       const post = async (path: string, body: unknown) =>
         fetch(`${HEARTBEAT_URL.replace(/\/$/, '')}${path}`, {

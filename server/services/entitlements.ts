@@ -61,7 +61,8 @@ const PLAN_LIMITS: Record<string, Entitlements> = {
 export async function getEntitlements(dbh: DbHandle, organizationId: string): Promise<Entitlements> {
   const planRows = await dbh
     .query<{ plan: string; limits: Partial<Entitlements> }>(
-      `SELECT plan, limits FROM org_entitlements WHERE organization_id = '${organizationId}'`,
+      `SELECT plan, limits FROM org_entitlements WHERE organization_id = $1::uuid`,
+      [organizationId],
     )
     .catch(() => [])
   const plan = planRows[0]?.plan ?? 'pilot'

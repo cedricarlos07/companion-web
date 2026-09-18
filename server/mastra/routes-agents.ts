@@ -19,7 +19,7 @@ export function buildAgentRouter(dbh: DbHandle): Router {
               (SELECT count(*) FROM agent_runs r WHERE r.agent_id = a.id)::int AS runs_total,
               (SELECT count(*) FROM agent_runs r WHERE r.agent_id = a.id AND r.status IN ('running','waiting_approval','waiting_input'))::int AS runs_active,
               (SELECT COALESCE(SUM(r.prompt_tokens + r.completion_tokens), 0) FROM agent_runs r WHERE r.agent_id = a.id)::int AS tokens_total
-       FROM agents a WHERE a.organization_id = '${req.user!.organizationId}' ORDER BY a.created_at`,
+       FROM agents a WHERE a.organization_id = $1::uuid ORDER BY a.created_at`, [req.user!.organizationId],
     )
     res.json({ agents: rows })
   })
@@ -27,12 +27,12 @@ export function buildAgentRouter(dbh: DbHandle): Router {
   router.get('/agents/:id', authRequired(dbh), async (req, res) => {
     const id = req.params.id as string
     const agent = (
-      await dbh.query(`SELECT * FROM agents WHERE id = '${id}' AND organization_id = '${req.user!.organizationId}'`)
+      await dbh.query(`SELECT * FROM agents WHERE id = $1::uuid AND organization_id = $2::uuid`, [id, req.user!.organizationId])
     )[0]
     if (!agent) return res.status(404).json({ error: 'agent introuvable' })
     const runs = await dbh.query(
       `SELECT id, goal, skill, status, prompt_tokens, completion_tokens, estimated_cost, verifier, created_at::text AS created_at
-       FROM agent_runs WHERE agent_id = '${id}' ORDER BY created_at DESC LIMIT 15`,
+       FROM agent_runs WHERE agent_id = $1::uuid ORDER BY created_at DESC LIMIT 15`, [id],
     )
     res.json({ agent, runs })
   })
@@ -40,7 +40,10 @@ export function buildAgentRouter(dbh: DbHandle): Router {
   router.post('/agents/:id/status', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
     const { status } = req.body as { status: string }
     if (!['idle', 'running', 'paused'].includes(status)) return res.status(400).json({ error: 'statut invalide' })
-    await dbh.exec(`UPDATE agents SET status = '${status}', updated_at = now() WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`)
+    await dbh.exec(
+      `UPDATE agents SET status = $1, updated_at = now() WHERE id = $2::uuid AND organization_id = $3::uuid`,
+      [status, req.params.id, req.user!.organizationId],
+    )
     await audit(dbh, req.user!.organizationId, { actor: req.user, action: 'agent.status_changed', targetType: 'agent', targetId: String(req.params.id), detail: { status } })
     res.json({ ok: true })
   })
@@ -52,7 +55,10 @@ export function buildAgentRouter(dbh: DbHandle): Router {
       agentKey?: string; workflowId?: string; goal?: string; skill?: string; inputData?: Record<string, unknown>
     }
     const agentRow = (
-      await dbh.query<{ key: string }>(`SELECT key FROM agents WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`)
+      await dbh.query<{ key: string }>(
+        `SELECT key FROM agents WHERE id = $1::uuid AND organization_id = $2::uuid`,
+        [req.params.id, req.user!.organizationId],
+      )
     )[0]
     if (!agentRow) return res.status(404).json({ error: 'agent introuvable' })
     const seed = AGENT_SEEDS.find((a) => a.key === agentRow.key)
@@ -79,10 +85,15 @@ export function buildAgentRouter(dbh: DbHandle): Router {
 
   router.get('/runs/:id', authRequired(dbh), async (req, res) => {
     const id = req.params.id as string
-    const run = (await dbh.query(`SELECT * FROM agent_runs WHERE id = '${id}' AND organization_id = '${req.user!.organizationId}'`))[0]
+    const run = (
+      await dbh.query(`SELECT * FROM agent_runs WHERE id = $1::uuid AND organization_id = $2::uuid`, [id, req.user!.organizationId])
+    )[0]
     if (!run) return res.status(404).json({ error: 'run introuvable' })
-    const steps = await dbh.query(`SELECT * FROM agent_run_steps WHERE run_id = '${id}' ORDER BY step_index`)
-    const calls = await dbh.query(`SELECT tool, status, policy_decision, policy_reason, created_at::text AS created_at FROM tool_calls WHERE run_id = '${id}' ORDER BY created_at`)
+    const steps = await dbh.query(`SELECT * FROM agent_run_steps WHERE run_id = $1::uuid ORDER BY step_index`, [id])
+    const calls = await dbh.query(
+      `SELECT tool, status, policy_decision, policy_reason, created_at::text AS created_at FROM tool_calls WHERE run_id = $1::uuid ORDER BY created_at`,
+      [id],
+    )
     res.json({ run, steps, toolCalls: calls })
   })
 
@@ -93,8 +104,8 @@ export function buildAgentRouter(dbh: DbHandle): Router {
     }
     await dbh.exec(
       `INSERT INTO agent_feedback (organization_id, run_id, user_id, user_name, verdict, comment, correction_memory_id)
-       VALUES ('${req.user!.organizationId}', '${req.params.id}', '${req.user!.id}', '${req.user!.name.replace(/'/g, "''")}', '${verdict}',
-               '${(comment ?? '').replace(/'/g, "''")}', ${correctionMemoryId ? `'${correctionMemoryId}'` : 'NULL'})`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [req.user!.organizationId, req.params.id, req.user!.id, req.user!.name, verdict, comment ?? null, correctionMemoryId ?? null],
     )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'agent.feedback', targetType: 'agent_run', targetId: String(req.params.id), detail: { verdict },
@@ -116,13 +127,13 @@ export function buildAgentRouter(dbh: DbHandle): Router {
 
   router.get('/approvals', authRequired(dbh), async (req, res) => {
     const status = (req.query.status as string) ?? 'pending'
-    const where = status === 'all' ? 'TRUE' : `a.status = '${status.replace(/'/g, "''")}'`
     const rows = await dbh.query(
       `SELECT a.id, a.action, a.tool, a.risk_level, a.preview, a.reason, a.sources, a.status,
               a.requested_at::text AS requested_at, a.decided_at::text AS decided_at, a.decided_by,
               a.agent_name, a.run_id
-       FROM approvals a WHERE a.organization_id = '${req.user!.organizationId}' AND ${where}
+       FROM approvals a WHERE a.organization_id = $1::uuid AND ($2::text = 'all' OR a.status = $2::text)
        ORDER BY a.requested_at DESC LIMIT 50`,
+      [req.user!.organizationId, status],
     )
     res.json({ approvals: rows })
   })
@@ -130,13 +141,15 @@ export function buildAgentRouter(dbh: DbHandle): Router {
   router.post('/approvals/:id/approve', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const approval = (
       await dbh.query<{ id: string; run_id: string | null; status: string }>(
-        `SELECT id, run_id, status FROM approvals WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`,
+        `SELECT id, run_id, status FROM approvals WHERE id = $1::uuid AND organization_id = $2::uuid`,
+        [req.params.id, req.user!.organizationId],
       )
     )[0]
     if (!approval) return res.status(404).json({ error: 'approbation introuvable' })
     if (approval.status !== 'pending') return res.status(400).json({ error: 'déjà décidée' })
     await dbh.exec(
-      `UPDATE approvals SET status = 'approved', decided_at = now(), decided_by = '${req.user!.name.replace(/'/g, "''")}' WHERE id = '${req.params.id}'`,
+      `UPDATE approvals SET status = 'approved', decided_at = now(), decided_by = $1 WHERE id = $2::uuid`,
+      [req.user!.name, req.params.id],
     )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'approval.granted', targetType: 'approval', targetId: String(req.params.id), detail: {},
@@ -144,7 +157,7 @@ export function buildAgentRouter(dbh: DbHandle): Router {
     if (approval.run_id) {
       // Reprise du workflow : le step suspendu lit la décision dans resumeData.
       const run = (await dbh.query<{ plan: { workflowId?: string; mastraRunId?: string } | null; goal: string }>(
-        `SELECT plan, goal FROM agent_runs WHERE id = '${approval.run_id}'`,
+        `SELECT plan, goal FROM agent_runs WHERE id = $1::uuid`, [approval.run_id],
       ))[0]
       if (run?.plan?.workflowId && run.plan.mastraRunId) {
         try {
@@ -162,13 +175,15 @@ export function buildAgentRouter(dbh: DbHandle): Router {
   router.post('/approvals/:id/reject', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
     const approval = (
       await dbh.query<{ id: string; run_id: string | null; status: string }>(
-        `SELECT id, run_id, status FROM approvals WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`,
+        `SELECT id, run_id, status FROM approvals WHERE id = $1::uuid AND organization_id = $2::uuid`,
+        [req.params.id, req.user!.organizationId],
       )
     )[0]
     if (!approval) return res.status(404).json({ error: 'approbation introuvable' })
     if (approval.status !== 'pending') return res.status(400).json({ error: 'déjà décidée' })
     await dbh.exec(
-      `UPDATE approvals SET status = 'rejected', decided_at = now(), decided_by = '${req.user!.name.replace(/'/g, "''")}' WHERE id = '${req.params.id}'`,
+      `UPDATE approvals SET status = 'rejected', decided_at = now(), decided_by = $1 WHERE id = $2::uuid`,
+      [req.user!.name, req.params.id],
     )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'approval.rejected', targetType: 'approval', targetId: String(req.params.id), detail: {},
@@ -188,13 +203,16 @@ export function buildAgentRouter(dbh: DbHandle): Router {
 
   router.get('/triggers', authRequired(dbh), async (req, res) => {
     const rows = await dbh.query(
-      `SELECT id, event_type, agent_key, skill, enabled, rate_limit_per_hour FROM triggers WHERE organization_id = '${req.user!.organizationId}' ORDER BY event_type`,
+      `SELECT id, event_type, agent_key, skill, enabled, rate_limit_per_hour FROM triggers WHERE organization_id = $1::uuid ORDER BY event_type`, [req.user!.organizationId],
     )
     res.json({ triggers: rows })
   })
 
   router.post('/triggers/:id/toggle', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
-    await dbh.exec(`UPDATE triggers SET enabled = NOT enabled WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`)
+    await dbh.exec(
+      `UPDATE triggers SET enabled = NOT enabled WHERE id = $1::uuid AND organization_id = $2::uuid`,
+      [req.params.id, req.user!.organizationId],
+    )
     res.json({ ok: true })
   })
 
@@ -221,7 +239,8 @@ export function buildAgentRouter(dbh: DbHandle): Router {
     const { maxRunTokens } = req.body as { maxRunTokens?: number }
     if (!maxRunTokens || maxRunTokens < 1) return res.status(400).json({ error: 'maxRunTokens invalide' })
     await dbh.exec(
-      `UPDATE agents SET max_run_tokens = ${Math.floor(maxRunTokens)}, updated_at = now() WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`,
+      `UPDATE agents SET max_run_tokens = $1, updated_at = now() WHERE id = $2::uuid AND organization_id = $3::uuid`,
+      [Math.floor(maxRunTokens), req.params.id, req.user!.organizationId],
     )
     res.json({ ok: true })
   })

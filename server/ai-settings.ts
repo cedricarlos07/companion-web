@@ -35,7 +35,8 @@ const DEFAULTS: AiSettings = {
 
 export async function getAiSettings(dbh: DbHandle, organizationId: string): Promise<AiSettings> {
   const rows = await dbh.query<{ value: Partial<AiSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = '${organizationId}' AND key = 'ai'`,
+    `SELECT value FROM settings WHERE organization_id = $1::uuid AND key = 'ai'`,
+    [organizationId],
   ).catch(() => [])
   const stored = rows[0]?.value ?? {}
   return {
@@ -51,8 +52,9 @@ export async function setAiSettings(dbh: DbHandle, organizationId: string, patch
   const next = { ...current, ...patch }
   await dbh.exec(
     `INSERT INTO settings (organization_id, key, value, updated_at)
-     VALUES ('${organizationId}', 'ai', '${JSON.stringify(next).replace(/'/g, "''")}', now())
+     VALUES ($1, 'ai', $2::jsonb, now())
      ON CONFLICT (organization_id, key) DO UPDATE SET value = excluded.value, updated_at = now()`,
+    [organizationId, JSON.stringify(next)],
   )
   return next
 }

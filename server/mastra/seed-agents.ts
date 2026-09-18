@@ -53,10 +53,10 @@ export async function seedAgents(dbh: DbHandle, organizationId: string) {
   for (const a of AGENT_SEEDS) {
     await dbh.exec(
       `INSERT INTO agents (organization_id, key, name, description, goal, status, autonomy, memory_scopes, allowed_skills, allowed_tools, model_provider, model)
-       VALUES ('${organizationId}', '${a.key}', '${a.name}', '${a.description.replace(/'/g, "''")}', '${a.goal.replace(/'/g, "''")}', 'idle', '${a.autonomy}',
-               '${JSON.stringify(a.memoryScopes)}'::jsonb, '${JSON.stringify(a.allowedSkills)}'::jsonb, '${JSON.stringify(a.allowedTools)}'::jsonb,
-               'ollama', NULL)
+       VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7::jsonb, $8::jsonb, $9::jsonb, 'ollama', NULL)
        ON CONFLICT (organization_id, key) DO NOTHING`,
+      [organizationId, a.key, a.name, a.description, a.goal, a.autonomy,
+       JSON.stringify(a.memoryScopes), JSON.stringify(a.allowedSkills), JSON.stringify(a.allowedTools)],
     )
   }
 
@@ -71,10 +71,10 @@ export async function seedAgents(dbh: DbHandle, organizationId: string) {
   for (const t of triggerSeeds) {
     await dbh.exec(
       `INSERT INTO triggers (organization_id, event_type, agent_key, skill)
-       SELECT '${organizationId}', '${t.eventType}', '${t.agentKey}', '${t.skill}'
+       SELECT $1, $2, $3, $4
        WHERE NOT EXISTS (
-         SELECT 1 FROM triggers WHERE organization_id = '${organizationId}' AND event_type = '${t.eventType}'
-       )`,
+         SELECT 1 FROM triggers WHERE organization_id = $5::uuid AND event_type = $6
+       )`, [organizationId, t.eventType, t.agentKey, t.skill, organizationId, t.eventType],
     )
   }
 }

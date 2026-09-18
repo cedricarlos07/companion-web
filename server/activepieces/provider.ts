@@ -89,10 +89,10 @@ export async function initializeExternalTools(dbh: DbHandle, organizationId: str
       // INSERT disabled par défaut — l'admin active manuellement.
       await dbh.exec(`
         INSERT INTO ap_tool_registry (organization_id, ap_name, namespaced_name, app_name, description, risk_level, side_effect, requires_approval, enabled)
-        VALUES ('${organizationId}', '${apName.replace(/'/g, "''")}', '${namespacedName(namespaced)}', '${appName.replace(/'/g, "''")}',
-                '${(tool.description ?? '').replace(/'/g, "''").slice(0, 500)}', '${risk}', true, ${requiresApprovalFor(apName)}, false)
+        VALUES ($1, $2, $3, $4, $5, $6, true, $7, false)
         ON CONFLICT (organization_id, ap_name) DO UPDATE SET description = excluded.description, discovered_at = now()
-      `).catch(() => undefined)
+      `, [organizationId, apName, namespacedName(namespaced), appName,
+          (tool.description ?? '').slice(0, 500), risk, requiresApprovalFor(apName)]).catch(() => undefined)
       discovered++
     }
 
@@ -112,7 +112,7 @@ function namespacedName(ns: string): string {
 
 async function getEnabledCount(dbh: DbHandle, organizationId: string): Promise<number> {
   const rows = await dbh
-    .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM ap_tool_registry WHERE organization_id = '${organizationId}' AND enabled = true`)
+    .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM ap_tool_registry WHERE organization_id = $1::uuid AND enabled = true`, [organizationId])
     .catch(() => [])
   return Number(rows[0]?.cnt ?? 0)
 }
@@ -128,7 +128,8 @@ export async function executeExternalTool(
 ): Promise<unknown> {
   const registry = await dbh
     .query<{ enabled: boolean; ap_name: string; risk_level: string }>(
-      `SELECT enabled, ap_name, risk_level FROM ap_tool_registry WHERE organization_id = '${organizationId}' AND namespaced_name = '${namespacedName.replace(/'/g, "''")}'`,
+      `SELECT enabled, ap_name, risk_level FROM ap_tool_registry WHERE organization_id = $1::uuid AND namespaced_name = $2`,
+      [organizationId, namespacedName],
     )
     .catch(() => [])
 
@@ -159,8 +160,11 @@ export async function executeExternalTool(
 /** Active/désactive un tool dans la registry (admin). */
 export async function setToolEnabled(dbh: DbHandle, organizationId: string, namespacedName: string, enabled: boolean, enabledBy: string) {
   await dbh.exec(
-    `UPDATE ap_tool_registry SET enabled = ${enabled}, enabled_at = ${enabled ? 'now()' : 'NULL'}, enabled_by = '${enabled ? enabledBy.replace(/'/g, "''") : 'NULL'}'
-     WHERE organization_id = '${organizationId}' AND namespaced_name = '${namespacedName.replace(/'/g, "''")}'`,
+    `UPDATE ap_tool_registry SET enabled = $1,
+       enabled_at = CASE WHEN $1 THEN now() ELSE NULL END,
+       enabled_by = CASE WHEN $1 THEN $2 ELSE NULL END
+     WHERE organization_id = $3::uuid AND namespaced_name = $4`,
+    [enabled, enabledBy, organizationId, namespacedName],
   )
 }
 
@@ -219,6 +223,6 @@ export async function authorizeExternalTool(
 /** Compat : liste les tools externes activés en registry. */
 export async function getEnabledTools(dbh: DbHandle, organizationId: string): Promise<{ namespaced_name: string; risk_level: string }[]> {
   return dbh.query<{ namespaced_name: string; risk_level: string }>(
-    `SELECT namespaced_name, risk_level FROM ap_tool_registry WHERE organization_id = '${organizationId}' AND enabled = true`,
+    `SELECT namespaced_name, risk_level FROM ap_tool_registry WHERE organization_id = $1::uuid AND enabled = true`, [organizationId],
   ).catch(() => [])
 }

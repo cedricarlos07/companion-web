@@ -19,7 +19,6 @@ import { runCompanionQuery } from '../mastra/companion-queries.js'
  */
 
 const reasonOf = (err: unknown) => (err instanceof Error ? err.message.replace(/^policy denied: /, '') : String(err))
-const esc = (s: string) => s.replace(/'/g, "''")
 
 export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): McpServer {
   const server = new McpServer(
@@ -85,24 +84,34 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
     },
     guarded('search_memory', async ({ query, scope, types, limit }: { query: string; scope?: { employeeId?: string; roleId?: string; departmentId?: string; projectId?: string }; types?: string[]; limit?: number }) => {
       const provider = await getMemoryProvider(dbh, client.organizationId)
-      const access = memoryAccessClause(actor(), client.organizationId)
-      const clauses: string[] = [access]
-      if (scope?.employeeId) clauses.push(`m.employee_id = '${esc(scope.employeeId)}'`)
-      if (scope?.roleId) clauses.push(`m.role_id = '${esc(scope.roleId)}'`)
-      if (scope?.departmentId) clauses.push(`m.department_id = '${esc(scope.departmentId)}'`)
-      if (types && types.length > 0) clauses.push(`m.type IN (${types.map((t) => `'${t}'`).join(',')})`)
-      const clause = clauses.join(' AND ')
+      // Fragments paramétrés : le vector search réserve $1/$2, l'accès commence
+      // à $3, puis les filtres de scope, puis le vector de re-tri en dernier.
+      const access = memoryAccessClause(actor(), client.organizationId, 3)
+      let n = 3 + access.params.length
+      const extraParams: unknown[] = []
+      const extraClauses: string[] = []
+      if (scope?.employeeId) { n++; extraParams.push(scope.employeeId); extraClauses.push(`m.employee_id = $${n}`) }
+      if (scope?.roleId) { n++; extraParams.push(scope.roleId); extraClauses.push(`m.role_id = $${n}`) }
+      if (scope?.departmentId) { n++; extraParams.push(scope.departmentId); extraClauses.push(`m.department_id = $${n}`) }
+      if (types && types.length > 0) { n++; extraParams.push(types); extraClauses.push(`m.type = ANY($${n}::text[])`) }
+      const accessAnd = {
+        text: [access.text, ...extraClauses].filter(Boolean).join(' AND '),
+        params: [...access.params, ...extraParams],
+      }
+      const orderIndex = 3 + accessAnd.params.length
 
       // FUSION : natif top 10 + mem0 top 10 → merge par companionMemoryId → reranking.
       const { vector } = await import('../services/embeddings.js').then((m) => m.embed(query))
       const v = JSON.stringify(vector).replace(/"/g, '')
       const [nativeRows, mem0Rows] = await Promise.all([
         dbh.query<{ id: string; semantic: string | null }>(`
-          SELECT m.id, 1 - (m.embedding <=> '${v}'::vector(768)) AS semantic
+          SELECT m.id, 1 - (m.embedding <=> $1::vector(768)) AS semantic
           FROM memories m
-          WHERE m.organization_id = '${client.organizationId}' AND ${clause} AND m.embedding IS NOT NULL
-          ORDER BY m.embedding <=> '${v}'::vector(768) LIMIT 10`),
-        provider.search({ query, organizationId: client.organizationId, topK: 10 }).then((hits) => hydrate(dbh, clause, hits.map((h) => h.companionMemoryId), hits)),
+          WHERE m.organization_id = $2::uuid AND ${accessAnd.text}
+            AND m.embedding IS NOT NULL
+          ORDER BY m.embedding <=> $${orderIndex}::vector(768) LIMIT 10`,
+          [v, client.organizationId, ...accessAnd.params, v]),
+        provider.search({ query, organizationId: client.organizationId, topK: 10 }).then((hits) => hydrate(dbh, actor(), client.organizationId, hits.map((h) => h.companionMemoryId), hits)),
       ])
       const merged = new Map<string, { id: string; semantic: number }>()
       for (const r of nativeRows) merged.set(r.id, { id: r.id, semantic: Number(r.semantic ?? 0) })
@@ -114,8 +123,8 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
       const rows = await dbh.query<{
         id: string; type: string; title: string; content: string; confidence: number; scope: string;
       }>(`SELECT id, type, title, content, confidence, scope FROM memories
-          WHERE id IN (${ids.map((i) => `'${i}'`).join(',')}) AND ${clause}
-          ORDER BY confidence DESC`)
+          WHERE id = ANY($1::uuid[]) AND ${memoryAccessClause(actor(), client.organizationId, 2).text}
+          ORDER BY confidence DESC`, [ids, ...memoryAccessClause(actor(), client.organizationId, 2).params])
       const withSources = await Promise.all(
         rows.map(async (m) => ({
           memoryId: m.id,
@@ -127,7 +136,7 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
           sourceReferences: (
             await dbh.query<{ document_title: string | null; location: string | null }>(
               `SELECT d.title AS document_title, ms.location FROM memory_sources ms
-               LEFT JOIN documents d ON d.id = ms.document_id WHERE ms.memory_id = '${m.id}'`,
+               LEFT JOIN documents d ON d.id = ms.document_id WHERE ms.memory_id = $1::uuid`, [m.id],
             )
           ).map((s2) => ({ source: s2.document_title ?? s2.location ?? 'interne' })),
         })),
@@ -146,12 +155,13 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
       inputSchema: { topic: z.string().min(2), maxMemories: z.number().min(1).max(20).optional() },
     },
     guarded('get_company_context', async ({ topic, maxMemories }: { topic: string; maxMemories?: number }) => {
-      const clause = memoryAccessClause(actor(), client.organizationId)
+      const access = memoryAccessClause(actor(), client.organizationId, 2)
       return dbh.query(
         `SELECT id, type, title, content, confidence, scope FROM memories
-         WHERE organization_id = '${client.organizationId}' AND scope = 'company' AND ${clause}
-           AND (title ILIKE '%${esc(topic)}%' OR content ILIKE '%${esc(topic)}%')
-         ORDER BY importance DESC LIMIT ${maxMemories ?? 8}`,
+         WHERE organization_id = $1::uuid AND scope = 'company' AND ${access.text}
+           AND ($${2 + access.params.length}::text IS NULL OR title ILIKE $${2 + access.params.length} OR content ILIKE $${2 + access.params.length})
+         ORDER BY importance DESC LIMIT $${3 + access.params.length}`,
+        [client.organizationId, ...access.params, topic ? `%${topic}%` : null, maxMemories ?? 8],
       )
     }),
   )
@@ -168,19 +178,22 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
     guarded('get_employee_context', async ({ employeeId, topic }: { employeeId: string; topic?: string }) => {
       const emp = await runCompanionQuery<{ first_name: string; last_name: string; department_id: string | null }>(
         dbh,
-        `SELECT first_name, last_name, department_id FROM employees WHERE id = '${esc(employeeId)}' AND organization_id = '${client.organizationId}'`,
+        `SELECT first_name, last_name, department_id FROM employees WHERE id = $1::uuid AND organization_id = $2::uuid`,
+        [employeeId, client.organizationId],
       )
       if (!emp[0]) return { error: 'NOT_FOUND: employé introuvable' }
       if (!scopeAllowsClient(client, 'department', emp[0].department_id ?? undefined) && !scopeAllowsClient(client, 'employee')) {
         throw new PolicyDeniedError('département de cet employé hors scopes du client', 'scope_denied')
       }
       await guard('get_employee_context', { employeeId })
-      const clause = memoryAccessClause(actor(), client.organizationId)
-      const filter = topic ? `AND (title ILIKE '%${esc(topic)}%' OR content ILIKE '%${esc(topic)}%')` : ''
+      const access = memoryAccessClause(actor(), client.organizationId, 2)
+      const topicIndex = 2 + access.params.length
       const rows = await dbh.query(
         `SELECT id, type, title, content, confidence, scope FROM memories
-         WHERE employee_id = '${esc(employeeId)}' AND ${clause} ${filter}
+         WHERE employee_id = $1::uuid AND ${access.text}
+           AND ($${topicIndex}::text IS NULL OR title ILIKE $${topicIndex} OR content ILIKE $${topicIndex})
          ORDER BY importance DESC LIMIT 12`,
+        [employeeId, ...access.params, topic ? `%${topic}%` : null],
       )
       return { employee: `${emp[0].first_name} ${emp[0].last_name}`, memories: rows }
     }),
@@ -196,22 +209,22 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
       inputSchema: { roleId: z.string(), topic: z.string().optional() },
     },
     guarded('get_role_context', async ({ roleId, topic }: { roleId: string; topic?: string }) => {
-      const role = await runCompanionQuery<{ title: string | null }>(dbh, `SELECT title FROM roles WHERE id = '${esc(roleId)}'`)
+      const role = await runCompanionQuery<{ title: string | null }>(dbh, `SELECT title FROM roles WHERE id = $1::uuid`, [roleId])
       if (!role[0]) return { error: 'NOT_FOUND: rôle introuvable' }
       if (!scopeAllowsClient(client, 'role', role[0].title ?? undefined) && !scopeAllowsClient(client, 'role')) {
         throw new PolicyDeniedError(`rôle « ${role[0].title} » hors scopes du client`, 'scope_denied')
       }
       await guard('get_role_context', { roleId })
-      const filter = topic ? `AND (title ILIKE '%${esc(topic)}%' OR content ILIKE '%${esc(topic)}%')` : ''
       const rows = await dbh.query(
         `SELECT id, type, title, content, confidence, status, contributor FROM memories
-         WHERE role_id = '${esc(roleId)}' AND status IN ('active','verified') ${filter}
-         ORDER BY importance DESC LIMIT 15`,
+         WHERE role_id = $1::uuid AND status IN ('active','verified')
+           AND ($2::text IS NULL OR title ILIKE $2 OR content ILIKE $2)
+         ORDER BY importance DESC LIMIT 15`, [roleId, topic ? `%${topic}%` : null],
       )
       const coverage = await runCompanionQuery<{ coverage: number | null }>(
         dbh,
         `SELECT round(100.0 * count(*) FILTER (WHERE scope = 'role') / GREATEST(count(*), 1)) AS coverage
-         FROM memories WHERE role_id = '${esc(roleId)}' AND status NOT IN ('rejected','superseded')`,
+         FROM memories WHERE role_id = $1::uuid AND status NOT IN ('rejected','superseded')`, [roleId],
       )
       return { role: role[0].title, coverage: coverage[0]?.coverage ?? 0, memories: rows }
     }),
@@ -229,9 +242,9 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
     guarded('get_project_context', async ({ projectId }: { projectId: string }) =>
       dbh.query(
         `SELECT id, type, title, content, confidence, status FROM memories
-         WHERE organization_id = '${client.organizationId}'
-           AND (id = '${esc(projectId)}' OR (type = 'project' AND title ILIKE '%${esc(projectId)}%'))
-         ORDER BY importance DESC LIMIT 10`,
+         WHERE organization_id = $1::uuid
+           AND (id = $2 OR (type = 'project' AND title ILIKE $3))
+         ORDER BY importance DESC LIMIT 10`, [client.organizationId, projectId, `%${projectId}%`],
       ),
     ),
   )
@@ -251,10 +264,6 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
     },
     guarded('get_knowledge_gaps', async ({ employeeId, roleId, departmentId }: { employeeId?: string; roleId?: string; departmentId?: string }) => {
       await guard('get_knowledge_gaps', {})
-      let where = `h.organization_id = '${client.organizationId}'`
-      if (employeeId) where += ` AND h.employee_id = '${esc(employeeId)}'`
-      if (roleId) where += ` AND e.role_id = '${esc(roleId)}'`
-      if (departmentId) where += ` AND e.department_id = '${esc(departmentId)}'`
       return dbh.query(
         `SELECT g.id, g.kind, g.question, g.status,
                 CASE WHEN g.kind = 'conflict' THEN 'high' ELSE 'medium' END AS severity,
@@ -264,7 +273,12 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
          FROM handover_gaps g
          JOIN handovers h ON h.id = g.handover_id
          JOIN employees e ON e.id = h.employee_id
-         WHERE ${where} ORDER BY g.created_at DESC LIMIT 20`,
+         WHERE h.organization_id = $1::uuid
+           AND ($2::text IS NULL OR h.employee_id = $2::uuid)
+           AND ($3::text IS NULL OR e.role_id = $3::uuid)
+           AND ($4::text IS NULL OR e.department_id = $4::uuid)
+         ORDER BY g.created_at DESC LIMIT 20`,
+        [client.organizationId, employeeId ?? null, roleId ?? null, departmentId ?? null],
       )
     }),
   )
@@ -301,7 +315,7 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
         source: sourceContext ? { excerpt: sourceContext.slice(0, 280), location: 'MCP' } : undefined,
       })
       const memoryId = String(result.memory?.id ?? '')
-      const statusRows = await dbh.query<{ status: string }>(`SELECT status FROM memories WHERE id = '${memoryId}'`)
+      const statusRows = await dbh.query<{ status: string }>(`SELECT status FROM memories WHERE id = $1::uuid`, [memoryId])
       await audit(dbh, client.organizationId, {
         actorName: client.clientName, actorKind: 'agent',
         action: 'mcp.memory.created_candidate', targetType: 'memory', targetId: memoryId,
@@ -356,7 +370,7 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
         inputData: { employeeId },
       } as never)
       await dbh.exec(
-        `UPDATE employees SET status = 'leaving' WHERE id = '${esc(employeeId)}' AND organization_id = '${client.organizationId}'`,
+        `UPDATE employees SET status = 'leaving' WHERE id = $1::uuid AND organization_id = $2::uuid`, [employeeId, client.organizationId],
       )
       const runRow = result.run as Record<string, unknown>
       return { handoverId: String(runRow.id ?? ''), runId: String(runRow.id ?? ''), status: String(result.status) }
@@ -381,11 +395,10 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
       const rows = await runCompanionQuery<{ id: string }>(
         dbh,
         `INSERT INTO approvals (organization_id, agent_name, action, tool, risk_level, preview, reason, sources, status)
-         VALUES ('${client.organizationId}', '${('mcp:' + client.clientName).replace(/'/g, "''")}',
-                 '${esc(action)}', 'external_action', 'high',
-                 '${JSON.stringify(preview ?? {}).replace(/'/g, "''")}'::jsonb, '${esc(reason)}',
-                 '${JSON.stringify(sources ?? [])}'::jsonb, 'pending')
+         VALUES ($1, $2, $3, 'external_action', 'high', $4::jsonb, $5, $6::jsonb, 'pending')
          RETURNING id`,
+        [client.organizationId, `mcp:${client.clientName}`, action,
+         JSON.stringify(preview ?? {}), reason, JSON.stringify(sources ?? [])],
       )
       await audit(dbh, client.organizationId, {
         actorName: client.clientName, actorKind: 'agent',
@@ -401,15 +414,18 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
 
 async function hydrate(
   dbh: DbHandle,
-  clause: string,
+  actor: MemoryActor | null,
+  organizationId: string,
   ids: string[],
   hits: { companionMemoryId: string; score: number }[],
 ): Promise<{ id: string; semantic: number }[]> {
   if (ids.length === 0) return []
+  const access = memoryAccessClause(actor, organizationId, 2)
   const scoreById = new Map(hits.map((h) => [h.companionMemoryId, h.score]))
   const rows = await dbh.query<{ id: string; semantic: number }>(
     `SELECT m.id, COALESCE(m.confidence / 100.0, 0) AS semantic
-     FROM memories m WHERE m.id IN (${ids.map((i) => `'${i}'`).join(',')}) AND ${clause}`,
+     FROM memories m WHERE m.id = ANY($1::uuid[]) AND ${access.text}`,
+    [ids, ...access.params],
   )
   for (const r of rows) r.semantic = scoreById.get(r.id) ?? Number(r.semantic)
   return rows

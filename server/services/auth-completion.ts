@@ -26,7 +26,8 @@ function generateToken(): string {
 
 export async function checkLockout(dbh: DbHandle, email: string): Promise<{ locked: boolean; minutesRemaining?: number }> {
   const rows = await dbh.query<{ failed_login_count: number; locked_until: string | null }>(
-    `SELECT failed_login_count, locked_until FROM users WHERE email = '${email.replace(/'/g, "''")}'`,
+    `SELECT failed_login_count, locked_until FROM users WHERE email = $1`,
+    [email],
   )
   const u = rows[0]
   if (!u?.locked_until) return { locked: false }
@@ -35,46 +36,45 @@ export async function checkLockout(dbh: DbHandle, email: string): Promise<{ lock
     return { locked: true, minutesRemaining: Math.ceil((lockedUntil.getTime() - Date.now()) / 60000) }
   }
   // Déverrouillage automatique
-  await dbh.exec(`UPDATE users SET locked_until = NULL, failed_login_count = 0 WHERE email = '${email.replace(/'/g, "''")}'`)
+  await dbh.exec(`UPDATE users SET locked_until = NULL, failed_login_count = 0 WHERE email = $1`, [email])
   return { locked: false }
 }
 
 export async function recordFailedLogin(dbh: DbHandle, email: string) {
-  const safe = email.replace(/'/g, "''")
-  await dbh.exec(`UPDATE users SET failed_login_count = failed_login_count + 1 WHERE email = '${safe}'`)
-  const rows = await dbh.query<{ failed_login_count: number }>(`SELECT failed_login_count FROM users WHERE email = '${safe}'`)
+  await dbh.exec(`UPDATE users SET failed_login_count = failed_login_count + 1 WHERE email = $1`, [email])
+  const rows = await dbh.query<{ failed_login_count: number }>(`SELECT failed_login_count FROM users WHERE email = $1`, [email])
   if ((rows[0]?.failed_login_count ?? 0) >= LOCKOUT_THRESHOLD) {
-    await dbh.exec(`UPDATE users SET locked_until = now() + interval '${LOCKOUT_DURATION_MIN} minutes' WHERE email = '${safe}'`)
+    await dbh.exec(`UPDATE users SET locked_until = now() + make_interval(mins => $1) WHERE email = $2`, [LOCKOUT_DURATION_MIN, email])
   }
 }
 
 export async function resetFailedLogins(dbh: DbHandle, email: string) {
-  await dbh.exec(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE email = '${email.replace(/'/g, "''")}'`)
+  await dbh.exec(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE email = $1`, [email])
 }
 
 /* --------------------------- PASSWORD RESET ------------------------------- */
 
 export async function createPasswordReset(dbh: DbHandle, email: string): Promise<string | null> {
-  const rows = await dbh.query<{ id: string }>(`SELECT id FROM users WHERE email = '${email.replace(/'/g, "''")}'`)
+  const rows = await dbh.query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])
   const user = rows[0]
   if (!user) return null // Ne pas révéler si l'email existe
   const token = generateToken()
   await dbh.exec(
     `INSERT INTO password_resets (user_id, token_hash, expires_at)
-     VALUES ('${user.id}', '${hashToken(token)}', now() + interval '1 hour')`,
+     VALUES ($1, $2, now() + interval '1 hour')`, [user.id, hashToken(token)],
   )
   return token // En production : envoyer par email. En dev : retourner pour test.
 }
 
 export async function resetPassword(dbh: DbHandle, token: string, newPassword: string): Promise<boolean> {
   const rows = await dbh.query<{ user_id: string; used_at: string | null }>(
-    `SELECT user_id, used_at FROM password_resets WHERE token_hash = '${hashToken(token)}' AND expires_at > now() AND used_at IS NULL`,
+    `SELECT user_id, used_at FROM password_resets WHERE token_hash = $1 AND expires_at > now() AND used_at IS NULL`, [hashToken(token)],
   )
   const reset = rows[0]
   if (!reset) return false
   const hash = await hashPassword(newPassword)
-  await dbh.exec(`UPDATE users SET password_hash = '${hash}', password_hash_updated_at = now(), failed_login_count = 0, locked_until = NULL WHERE id = '${reset.user_id}'`)
-  await dbh.exec(`UPDATE password_resets SET used_at = now() WHERE token_hash = '${hashToken(token)}'`)
+  await dbh.exec(`UPDATE users SET password_hash = $1, password_hash_updated_at = now(), failed_login_count = 0, locked_until = NULL WHERE id = $2::uuid`, [hash, reset.user_id])
+  await dbh.exec(`UPDATE password_resets SET used_at = now() WHERE token_hash = $1`, [hashToken(token)])
   return true
 }
 
@@ -91,15 +91,16 @@ export async function createInvitation(
   const token = generateToken()
   const rows = await dbh.query<{ id: string }>(
     `INSERT INTO invitations (organization_id, email, role, token_hash, invited_by, invited_by_name)
-     VALUES ('${organizationId}', '${email.replace(/'/g, "''")}', '${role}', '${hashToken(token)}', ${invitedBy ? `'${invitedBy}'` : 'NULL'}, '${invitedByName.replace(/'/g, "''")}')
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
+    [organizationId, email, role, hashToken(token), invitedBy ?? null, invitedByName],
   )
   return { invitationId: rows[0].id, token }
 }
 
 export async function acceptInvitation(dbh: DbHandle, token: string, password: string, firstName: string, lastName: string): Promise<boolean> {
   const rows = await dbh.query<{ id: string; organization_id: string; email: string; role: string }>(
-    `SELECT id, organization_id, email, role FROM invitations WHERE token_hash = '${hashToken(token)}' AND status = 'pending' AND expires_at > now()`,
+    `SELECT id, organization_id, email, role FROM invitations WHERE token_hash = $1 AND status = 'pending' AND expires_at > now()`, [hashToken(token)],
   )
   const inv = rows[0]
   if (!inv) return false
@@ -111,7 +112,7 @@ export async function acceptInvitation(dbh: DbHandle, token: string, password: s
     name: `${firstName} ${lastName}`,
     appRole: inv.role,
   }).returning()
-  await dbh.exec(`UPDATE invitations SET status = 'accepted' WHERE id = '${inv.id}'`)
+  await dbh.exec(`UPDATE invitations SET status = 'accepted' WHERE id = $1::uuid`, [inv.id])
   return Boolean(newUser)
 }
 
@@ -120,14 +121,14 @@ export async function acceptInvitation(dbh: DbHandle, token: string, password: s
 export async function getUserSessions(dbh: DbHandle, userId: string) {
   return dbh.query(
     `SELECT id, device, ip_address, created_at::text AS created_at, last_active_at::text AS last_active_at
-     FROM user_sessions WHERE user_id = '${userId}' AND revoked_at IS NULL ORDER BY last_active_at DESC`,
+     FROM user_sessions WHERE user_id = $1::uuid AND revoked_at IS NULL ORDER BY last_active_at DESC`, [userId],
   )
 }
 
 export async function revokeSession(dbh: DbHandle, sessionId: string, userId: string) {
-  await dbh.exec(`UPDATE user_sessions SET revoked_at = now() WHERE id = '${sessionId}' AND user_id = '${userId}'`)
+  await dbh.exec(`UPDATE user_sessions SET revoked_at = now() WHERE id = $1::uuid AND user_id = $2::uuid`, [sessionId, userId])
 }
 
 export async function revokeAllOtherSessions(dbh: DbHandle, userId: string, currentSessionHash: string) {
-  await dbh.exec(`UPDATE user_sessions SET revoked_at = now() WHERE user_id = '${userId}' AND session_token_hash != '${currentSessionHash}' AND revoked_at IS NULL`)
+  await dbh.exec(`UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1::uuid AND session_token_hash != $2 AND revoked_at IS NULL`, [userId, currentSessionHash])
 }

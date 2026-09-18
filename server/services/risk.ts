@@ -41,20 +41,20 @@ export interface RiskScore {
 
 export async function computeEmployeeRisk(dbh: DbHandle, organizationId: string, employeeId: string): Promise<RiskScore | null> {
   const emp = await dbh.query<{ id: string; first_name: string; last_name: string; role_id: string | null; status: string }>(
-    `SELECT id, first_name, last_name, role_id, status FROM employees WHERE id = '${employeeId}' AND organization_id = '${organizationId}'`,
+    `SELECT id, first_name, last_name, role_id, status FROM employees WHERE id = $1::uuid AND organization_id = $2::uuid`, [employeeId, organizationId],
   )
   const e = emp[0]
   if (!e) return null
   const name = `${e.first_name} ${e.last_name}`
 
-  const stats = await memoryStatsFor(dbh, `m.employee_id = '${employeeId}'`)
+  const stats = await memoryStatsFor(dbh, 'employee', employeeId)
   const orgTotals = await orgTotalsFor(dbh, organizationId)
 
   // 1) Single-owner ratio — of all org memories with an employee owner, how much rests on this person alone?
   const singleOwner = await dbh.query<{ cnt: string }>(`
     SELECT count(*)::text AS cnt FROM memories m
-    WHERE m.organization_id = '${organizationId}'
-      AND m.employee_id = '${employeeId}'
+    WHERE m.organization_id = $1::uuid
+      AND m.employee_id = $2::uuid
       AND m.type IN ('procedure', 'decision')
       AND NOT EXISTS (
         SELECT 1 FROM memories m2
@@ -65,7 +65,7 @@ export async function computeEmployeeRisk(dbh: DbHandle, organizationId: string,
           AND m2.title = m.title
           AND m2.employee_id <> m.employee_id
       )
-  `)
+  `, [organizationId, employeeId])
   const singleOwnerCount = Number(singleOwner[0]?.cnt ?? 0)
   const uniqueRatio = stats.total > 0 ? Math.min(1, singleOwnerCount / Math.max(20, stats.total * 0.25)) : 0.9
 
@@ -80,7 +80,7 @@ export async function computeEmployeeRisk(dbh: DbHandle, organizationId: string,
 
   // 5) Handover readiness
   const hv = await dbh.query<{ readiness: number }>(
-    `SELECT readiness FROM handovers WHERE employee_id = '${employeeId}' ORDER BY created_at DESC LIMIT 1`,
+    `SELECT readiness FROM handovers WHERE employee_id = $1::uuid ORDER BY created_at DESC LIMIT 1`, [employeeId],
   )
   const handoverReadiness = hv[0]?.readiness ?? null
   const handoverGap = e.status === 'leaving' ? 1 - (handoverReadiness ?? 0) / 100 : handoverReadiness === null ? 0.4 : 1 - handoverReadiness / 100
@@ -115,27 +115,27 @@ export async function computeEmployeeRisk(dbh: DbHandle, organizationId: string,
 
 export async function computeRoleRisk(dbh: DbHandle, organizationId: string, roleId: string): Promise<RiskScore | null> {
   const role = await dbh.query<{ id: string; title: string }>(
-    `SELECT id, title FROM roles WHERE id = '${roleId}' AND organization_id = '${organizationId}'`,
+    `SELECT id, title FROM roles WHERE id = $1::uuid AND organization_id = $2::uuid`, [roleId, organizationId],
   )
   const r = role[0]
   if (!r) return null
 
-  const stats = await memoryStatsFor(dbh, `m.role_id = '${roleId}'`)
+  const stats = await memoryStatsFor(dbh, 'role', roleId)
   const holders = await dbh.query<{ cnt: string }>(
-    `SELECT count(*)::text AS cnt FROM employees WHERE role_id = '${roleId}' AND status IN ('active', 'leaving')`,
+    `SELECT count(*)::text AS cnt FROM employees WHERE role_id = $1::uuid AND status IN ('active', 'leaving')`, [roleId],
   )
   const holderCount = Number(holders[0]?.cnt ?? 0)
 
   const singleOwner = await dbh.query<{ cnt: string }>(`
     SELECT count(DISTINCT m.title)::text AS cnt FROM memories m
-    WHERE m.organization_id = '${organizationId}' AND m.role_id = '${roleId}'
+    WHERE m.organization_id = $1::uuid AND m.role_id = $2::uuid
       AND m.type IN ('procedure', 'decision')
       AND NOT EXISTS (
         SELECT 1 FROM memories m3
         WHERE m3.organization_id = m.organization_id AND m3.role_id = m.role_id
           AND m3.title = m.title AND m3.id <> m.id
       )
-  `)
+  `, [organizationId, roleId])
   const uniqueCount = Number(singleOwner[0]?.cnt ?? 0)
   const uniqueRatio = stats.total > 0 ? Math.min(1, uniqueCount / Math.max(20, stats.total * 0.2)) : 1
   // A role held by a single person is structurally riskier.
@@ -147,8 +147,8 @@ export async function computeRoleRisk(dbh: DbHandle, organizationId: string, rol
   const lastHv = await dbh.query<{ readiness: number }>(`
     SELECT h.readiness FROM handovers h
     JOIN employees e ON e.id = h.employee_id
-    WHERE e.role_id = '${roleId}' ORDER BY h.created_at DESC LIMIT 1
-  `)
+    WHERE e.role_id = $1::uuid ORDER BY h.created_at DESC LIMIT 1
+  `, [roleId])
   const handoverReadiness = lastHv[0]?.readiness ?? null
   const handoverGap = handoverReadiness === null ? 0.5 : 1 - handoverReadiness / 100
 
@@ -182,10 +182,10 @@ export async function computeRoleRisk(dbh: DbHandle, organizationId: string, rol
 
 export async function orgRiskOverview(dbh: DbHandle, organizationId: string) {
   const emps = await dbh.query<{ id: string }>(
-    `SELECT id FROM employees WHERE organization_id = '${organizationId}' AND status IN ('active', 'leaving')`,
+    `SELECT id FROM employees WHERE organization_id = $1::uuid AND status IN ('active', 'leaving')`, [organizationId],
   )
   const rolesList = await dbh.query<{ id: string }>(
-    `SELECT id FROM roles WHERE organization_id = '${organizationId}'`,
+    `SELECT id FROM roles WHERE organization_id = $1::uuid`, [organizationId],
   )
   const employeeScores: RiskScore[] = []
   for (const e of emps) {
@@ -220,7 +220,7 @@ interface MemStats {
   singleSource: number
 }
 
-async function memoryStatsFor(dbh: DbHandle, where: string): Promise<MemStats> {
+async function memoryStatsFor(dbh: DbHandle, scope: 'employee' | 'role', id: string): Promise<MemStats> {
   const rows = await dbh.query<{ total: string; procedures: string; stale: string; single_source: string }>(`
     SELECT
       count(*)::text AS total,
@@ -228,8 +228,9 @@ async function memoryStatsFor(dbh: DbHandle, where: string): Promise<MemStats> {
       count(*) FILTER (WHERE m.updated_at < now() - interval '365 days')::text AS stale,
       count(*) FILTER (WHERE (SELECT count(*) FROM memory_sources ms WHERE ms.memory_id = m.id) <= 1 AND m.origin <> 'human')::text AS single_source
     FROM memories m
-    WHERE ${where} AND m.status NOT IN ('rejected', 'superseded')
-  `)
+    WHERE CASE WHEN $2::text = 'role' THEN m.role_id::text ELSE m.employee_id::text END = $1::text
+      AND m.status NOT IN ('rejected', 'superseded')
+  `, [id, scope])
   return {
     total: Number(rows[0]?.total ?? 0),
     procedures: Number(rows[0]?.procedures ?? 0),
@@ -241,9 +242,9 @@ async function memoryStatsFor(dbh: DbHandle, where: string): Promise<MemStats> {
 async function orgTotalsFor(dbh: DbHandle, organizationId: string) {
   const rows = await dbh.query<{ employees: string; roles: string }>(`
     SELECT
-      (SELECT count(*) FROM employees WHERE organization_id = '${organizationId}' AND status <> 'former')::text AS employees,
-      (SELECT count(*) FROM roles WHERE organization_id = '${organizationId}')::text AS roles
-  `)
+      (SELECT count(*) FROM employees WHERE organization_id = $1::uuid AND status <> 'former')::text AS employees,
+      (SELECT count(*) FROM roles WHERE organization_id = $2::uuid)::text AS roles
+  `, [organizationId, organizationId])
   return { employees: Number(rows[0]?.employees ?? 0), roles: Number(rows[0]?.roles ?? 0) }
 }
 

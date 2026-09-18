@@ -49,8 +49,8 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
     // Crée la source et le document, puis exécute le pipeline d'ingestion.
     await dbh.exec(
       `INSERT INTO sources (organization_id, kind, name, status, config)
-       VALUES ('${orgId}', 'local', '${(sourceName ?? 'Activepieces').replace(/'/g, "''")}', 'connected',
-               '${JSON.stringify({ employeeId: employeeId ?? null, viaActivepieces: true }).replace(/'/g, "''")}'::jsonb)`,
+       VALUES ($1, 'local', $2, 'connected', $3::jsonb)`,
+      [orgId, sourceName ?? 'Activepieces', JSON.stringify({ employeeId: employeeId ?? null, viaActivepieces: true })],
     )
     const srcRows = await dbh.query<{ id: string }>(`SELECT id FROM sources ORDER BY created_at DESC LIMIT 1`)
     const sourceId = srcRows[0]?.id
@@ -62,12 +62,11 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
 
     const ext = (fileName.slice(fileName.lastIndexOf('.')) || '.txt').toLowerCase()
     const mime = ext.replace('.', '')
-    const extId = externalId ? `'${externalId.replace(/'/g, "''")}'` : 'NULL'
-    const extProvider = provider ? `'${provider.replace(/'/g, "''")}'` : 'NULL'
     const docRows = await dbh.query<{ id: string }>(
       `INSERT INTO documents (organization_id, source_id, title, mime_type, size_bytes, storage_path, status, external_id, external_provider)
-       VALUES ('${orgId}', '${sourceId}', '${fileName.replace(/'/g, "''")}', '${mime}', ${Buffer.byteLength(content)}, '${filePath.replace(/\\/g, '\\\\')}', 'queued', ${extId}, ${extProvider})
+       VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8)
        RETURNING id`,
+      [orgId, sourceId, fileName, mime, Buffer.byteLength(content), filePath, externalId ?? null, provider ?? null],
     )
     const doc = docRows[0]
 

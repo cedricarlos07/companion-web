@@ -56,10 +56,10 @@ export async function reindexMemoriesFromDb(dbh: DbHandle, organizationId: strin
     }>(
       `SELECT id, type, title, content, scope, status, confidence, employee_id, role_id, department_id
        FROM memories
-       WHERE organization_id = '${organizationId}'
+       WHERE organization_id = $1::uuid
          AND status IN ('active', 'verified')
        ORDER BY importance DESC
-       LIMIT ${cap}`,
+       LIMIT $2`, [organizationId, cap],
     )
     .catch(() => [])
 
