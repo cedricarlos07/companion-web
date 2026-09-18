@@ -115,26 +115,40 @@ export function buildPortal(dbh: DbHandle): Router {
   router.get('/portal/login', (req: Request, res: Response) => {
     const hasError = Boolean((req.query as Record<string, unknown>).error)
     res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/png" href="/portal-assets/logo-green.png">
 <title>KamaLoka — Portail client</title><style>
-body{font:14px/1.5 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:#f6f7f9;display:grid;place-items:center;min-height:100vh;margin:0;color:#344054}
-.box{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:34px;width:min(400px,90vw);box-shadow:0 12px 34px rgba(16,24,40,.08)}
-.brand{display:flex;align-items:center;gap:11px;margin-bottom:20px}
-.mark{width:40px;height:40px;border-radius:12px;background:#c4f68c;display:grid;place-items:center;flex:none}
-h1{font-size:18px;margin:0;color:#101828}p{color:#667085;margin:0 0 20px;font-size:13px}
-label{display:block;font-size:12px;color:#475467;margin-bottom:12px}input{width:100%;box-sizing:border-box;border:1px solid #d0d5dd;border-radius:9px;padding:10px;font:inherit;margin-top:4px}
-input:focus{outline:2px solid #1849a9;outline-offset:1px;border-color:#1849a9}
-button{width:100%;background:#1849a9;color:#fff;border:0;border-radius:10px;padding:11px;font:inherit;font-weight:600;cursor:pointer}
-button:hover{background:#0f2f6b}
-.err{color:#b42318;font-size:13px;margin-bottom:10px}
-.foot{margin-top:18px;font-size:12px;color:#98a2b3;text-align:center}
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url('/dl/font-inter') format('woff2')}
+*{box-sizing:border-box}
+body{font:14px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:#f6f7f9;margin:0;color:#1a1d21;min-height:100vh;display:grid;place-items:center;padding:24px;position:relative;overflow:hidden}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none}
+.blob1{top:-140px;left:-120px;width:460px;height:460px;background:rgba(196,246,140,.32)}
+.blob2{bottom:-160px;right:-140px;width:480px;height:480px;background:rgba(88,131,236,.16)}
+.box{position:relative;background:#fff;border:1px solid #e4e7ec;border-radius:20px;padding:36px;width:min(420px,92vw);box-shadow:0 18px 48px rgba(16,24,40,.12)}
+.brand{margin-bottom:22px}
+.brand img{height:34px;width:auto}
+h1{font-size:19px;margin:0 0 4px;color:#101828}
+p.sub{color:#667085;margin:0 0 22px;font-size:13px}
+label{display:block;font-size:12.5px;color:#475467;margin-bottom:14px;font-weight:500}
+input{width:100%;border:1px solid #d0d5dd;border-radius:10px;padding:11px;font:inherit;margin-top:5px;background:#fff}
+input:focus{outline:2px solid #84d16a;outline-offset:1px;border-color:#84d16a}
+button{width:100%;background:#c4f68c;color:#101828;border:0;border-radius:11px;padding:12px;font:inherit;font-weight:700;cursor:pointer;margin-top:4px;transition:background .15s}
+button:hover{background:#b2ef70}
+.err{color:#b42318;font-size:13px;margin-bottom:12px}
+.foot{margin-top:20px;padding-top:16px;border-top:1px solid #eef0f3;font-size:12.5px;color:#667085;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.foot a{color:#475467;text-decoration:none}
+.foot a:hover{color:#101828}
 </style></head><body>
-<div class="box"><div class="brand"><img src="/portal-assets/logo-dark.png" alt="Companion" style="height:30px;width:auto">
-<div><h1 style="margin:0">Portail client KamaLoka</h1><p style="margin:2px 0 0">Companion — licences, téléchargements, factures</p></div></div>
+<div class="blob blob1"></div><div class="blob blob2"></div>
+<div class="box">
+<div class="brand"><img src="/portal-assets/logo-dark.png" alt="Companion"></div>
+<h1>Portail client KamaLoka</h1>
+<p class="sub">Gérez votre licence, téléchargez les kits officiels et suivez vos factures Companion.</p>
 ${hasError ? '<p class="err">Identifiants invalides.</p>' : ''}
 <form method="post" action="/portal/login"><label>Email<input name="email" type="email" required autofocus>
 </label><label>Mot de passe<input name="password" type="password" required></label>
 <button type="submit">Se connecter</button></form>
-<p class="foot">KamaLoka AI Technologies · support@kamaloka.ai</p></div></body></html>`)
+<div class="foot"><a href="/landing">← Site produit</a><a href="/docs">Documentation</a><a href="mailto:support@kamaloka.ai">Support</a></div>
+</div></body></html>`)
   })
 
   router.post('/portal/login', async (req: Request, res: Response) => {
