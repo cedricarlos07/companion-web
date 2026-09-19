@@ -6,6 +6,7 @@ import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { LoginIcon, ShieldUserIcon } from '@/lib/icons'
 import { ORG } from '@/data/org'
+import { assertMockAllowed } from '@/lib/mock'
 import { api } from '@/services/api'
 
 /** Minimal enterprise login — no illustration, just the essentials. */
@@ -27,11 +28,15 @@ export function LoginPage() {
     setBusy(false)
     if (res) {
       navigate('/home')
-    } else {
-      // Backend indisponible ou identifiants invalides — démo ouverte en mode mock.
+      return
+    }
+    // Identifiants invalides ou backend indisponible.
+    if (assertMockAllowed('login')) {
       setError('')
       navigate('/home')
+      return
     }
+    setError('Connexion impossible : backend indisponible ou identifiants invalides.')
   }
 
   return (
