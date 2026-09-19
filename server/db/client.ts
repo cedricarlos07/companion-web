@@ -3,13 +3,16 @@ import { vector as pgliteVector } from '@electric-sql/pglite/vector'
 import { drizzle as drizzlePgLite } from 'drizzle-orm/pglite'
 import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
+import path from 'node:path'
 import * as schema from './schema.js'
 
 /**
  * DB bootstrap.
  * - DATABASE_URL set  → real PostgreSQL (self-hosted / Docker Compose, pgvector).
  * - otherwise         → PGlite embedded Postgres (same engine, pgvector included),
- *                       persisted under ./data/pg — zero-dependency dev/demo mode.
+ *                       persisted under $COMPANION_DATA_DIR/pg (défaut ./data) —
+ *                       zero-dependency dev/demo mode. Les runs de tests passent
+ *                       leur propre COMPANION_DATA_DIR : jamais de data dir partagé.
  */
 export interface DbHandle {
   db: ReturnType<typeof drizzlePgLite<typeof schema>>
@@ -44,7 +47,8 @@ export async function createDb(): Promise<DbHandle> {
     }
   }
 
-  const client = new PGlite('./data/pg', { extensions: { vector: pgliteVector } })
+  const dataDir = path.join(process.env.COMPANION_DATA_DIR ?? './data', 'pg')
+  const client = new PGlite(dataDir, { extensions: { vector: pgliteVector } })
   await client.exec('CREATE EXTENSION IF NOT EXISTS vector')
   const db = drizzlePgLite(client, { schema })
   return {
@@ -54,7 +58,8 @@ export async function createDb(): Promise<DbHandle> {
         const res = await client.query<T>(sql, params)
         return res.rows
       } catch (err) {
-        console.error('[sql-debug]', sql.replace(/\s+/g, ' ').slice(0, 200), JSON.stringify(params))
+        // Observabilité : la requête seule, jamais les paramètres (données métier).
+        console.error('[sql] échec:', sql.replace(/\s+/g, ' ').slice(0, 200), '|', String(err).slice(0, 160))
         throw err
       }
     },
@@ -64,7 +69,7 @@ export async function createDb(): Promise<DbHandle> {
         if (params?.length) await client.query(sql, params)
         else await client.exec(sql)
       } catch (err) {
-        console.error('[sql-debug]', sql.replace(/\s+/g, ' ').slice(0, 200), JSON.stringify(params))
+        console.error('[sql] échec:', sql.replace(/\s+/g, ' ').slice(0, 200), '|', String(err).slice(0, 160))
         throw err
       }
     },

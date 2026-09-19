@@ -61,6 +61,12 @@ export async function seedAgents(dbh: DbHandle, organizationId: string) {
   }
 
   // Triggers V1 — les 5 événements du plan.
+  // Anti-storm : quota réel en production (20/h), quota large sinon — les
+  // batteries de tests relancent les mêmes événements et épuiseraient 20/h.
+  const triggerRateLimit = Number(
+    process.env.TRIGGER_RATE_LIMIT_PER_HOUR ??
+      (process.env.NODE_ENV === 'production' ? 20 : 500),
+  )
   const triggerSeeds = [
     { eventType: 'employee.leaving', agentKey: 'handover-agent', skill: 'handover_employee' },
     { eventType: 'employee.created', agentKey: 'onboarding-agent', skill: 'onboard_employee' },
@@ -70,11 +76,11 @@ export async function seedAgents(dbh: DbHandle, organizationId: string) {
   ]
   for (const t of triggerSeeds) {
     await dbh.exec(
-      `INSERT INTO triggers (organization_id, event_type, agent_key, skill)
-       SELECT $1, $2, $3, $4
+      `INSERT INTO triggers (organization_id, event_type, agent_key, skill, rate_limit_per_hour)
+       SELECT $1, $2, $3, $4, $5
        WHERE NOT EXISTS (
-         SELECT 1 FROM triggers WHERE organization_id = $5::uuid AND event_type = $6
-       )`, [organizationId, t.eventType, t.agentKey, t.skill, organizationId, t.eventType],
+         SELECT 1 FROM triggers WHERE organization_id = $6::uuid AND event_type = $7
+       )`, [organizationId, t.eventType, t.agentKey, t.skill, triggerRateLimit, organizationId, t.eventType],
     )
   }
 }
