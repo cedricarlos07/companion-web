@@ -22,7 +22,8 @@
     "security:check": "bash scripts/security-check.sh",
     "test:battery": "node scripts/test-battery.mjs",
     "check:frontend": "node scripts/check-frontend.mjs",
-    "test:handover-e2e": "node scripts/test-handover-e2e.mjs"
+    "test:handover-e2e": "node scripts/test-handover-e2e.mjs",
+    "test:handover-ui": "node scripts/test-handover-ui.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.49",

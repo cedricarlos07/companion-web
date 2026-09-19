@@ -29,10 +29,10 @@ n/a sans objet · 🔍 à vérifier écran par écran.
 | `/sources` | ✅ | ✅ (connect) | 🔍 | ❌ | ✅ | ✅ | ❌ |
 | `/sources/new` | n/a | 🟡 (upload → store ?) | 🔍 | ❌ | ✅ | ✅ | ❌ |
 | `/knowledge-risk` | 🟡 service risk | n/a | 🔍 | ❌ | ✅ | n/a | ❌ |
-| `/handovers` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `/handovers/new/:employeeId` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `/handovers/:id` (détail/pack) | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `/handovers/:id/interview` | 🟡 (entretien API) | ✅ answer | 🔍 | ❌ | ✅ | 🟡 | 🟡 |
+| `/handovers` | ✅ liste API + recherche/filtre | n/a (création via new) | 🔍 | ✅ | ✅ | 🟡 | ✅ handover-ui |
+| `/handovers/new` (+ /:employeeId) | ✅ employés réels | ✅ POST /handovers (anti double-submit) | ✅ rôle gate | ✅ | ✅ | ✅ | ✅ handover-ui |
+| `/handovers/:id` (détail/pack) | ✅ | ✅ pack/successeur | 🔍 | ✅ | ✅ | ✅ | ✅ handover-e2e |
+| `/handovers/:id/interview` | ✅ gaps réels | ✅ réponses persistées | 🔍 | ✅ | ✅ | ✅ | ✅ handover-ui |
 | `/onboarding` | 🟡 | n/a | 🔍 | ❌ | ✅ | n/a | ❌ |
 | `/onboarding/:id` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `/agents` | ✅ liste | 🟡 (status) | ✅ role gate | ❌ | ✅ | 🟡 | ✅ battery |
