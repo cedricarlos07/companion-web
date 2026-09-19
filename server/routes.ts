@@ -216,7 +216,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
     const contributors = await dbh.query(`
       SELECT contributor AS name, count(*)::int AS contributions,
              min(created_at::text) AS from, max(updated_at::text) AS to,
-             max(employee_id) AS employee_id
+             max(employee_id::text) AS employee_id
       FROM memories WHERE role_id = $1::uuid AND contributor IS NOT NULL
       GROUP BY contributor ORDER BY count(*) DESC LIMIT 10
     `, [id])
@@ -872,6 +872,43 @@ export function buildApiRouter(dbh: DbHandle): Router {
     `, [String(req.params.id)])
     if (!rows[0]) return res.status(404).json({ error: 'onboarding introuvable' })
     res.json({ onboarding: rows[0] })
+  })
+
+  /* Progression onboarding persistée — l'employé concerné peut cocher ses
+   * propres étapes, les managers/admin aussi (audit dans les deux cas). */
+  api.post('/onboardings/:id/progress', authRequired(dbh), async (req, res) => {
+    const { key, done } = req.body as { key?: string; done?: boolean }
+    if (!key || typeof done !== 'boolean') return res.status(400).json({ error: 'key et done (booléen) requis' })
+    const rows = await dbh.query<{ id: string; organization_id: string; employee_id: string }>(
+      `SELECT id, organization_id, employee_id FROM onboardings WHERE id = $1::uuid`, [String(req.params.id)],
+    )
+    const onboarding = rows[0]
+    if (!onboarding) return res.status(404).json({ error: 'onboarding introuvable' })
+    if (onboarding.organization_id !== req.user!.organizationId) {
+      return res.status(404).json({ error: 'onboarding introuvable' })
+    }
+    const isOwnerEmployee = req.user!.employeeId === onboarding.employee_id
+    const privileged = ['owner', 'admin', 'manager'].includes(req.user!.appRole)
+    if (!isOwnerEmployee && !privileged) {
+      return res.status(403).json({ error: 'seul l\'employé concerné ou un manager peut modifier la progression' })
+    }
+    const planRows = await dbh.query<{ plan: Record<string, unknown> }>(
+      `SELECT plan FROM onboardings WHERE id = $1::uuid`, [String(req.params.id)],
+    )
+    const plan = planRows[0]?.plan ?? {}
+    const doneItems: string[] = Array.isArray(plan.doneItems) ? (plan.doneItems as string[]) : []
+    const doneItemsNext = done
+      ? [...new Set([...doneItems, key])]
+      : doneItems.filter((k) => k !== key)
+    await dbh.db
+      .update(onboardings)
+      .set({ plan: { ...plan, doneItems: doneItemsNext }, updatedAt: new Date() })
+      .where(eq(onboardings.id, String(req.params.id)))
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: done ? 'onboarding.step_done' : 'onboarding.step_undone',
+      targetType: 'onboarding', targetId: String(req.params.id), detail: { key },
+    })
+    res.json({ ok: true, doneItems: doneItemsNext })
   })
 
   /* ------------------------------- Overview -------------------------------- */

@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
@@ -6,36 +7,48 @@ import { ProgressRow, ScoreRing } from '@/components/common/progress'
 import { Button } from '@/components/base/buttons/button'
 import { adaptIcon } from '@/components/ui/huge-icon'
 import { PlusSignIcon } from '@/lib/icons'
-import { ONBOARDINGS } from '@/data/continuity'
 import { api } from '@/services/api'
-import { useEffect, useState } from 'react'
-import { useAppStore } from '@/store/app-store'
+
+interface OnboardingListItem {
+  id: string
+  employee_name: string
+  role_title: string | null
+  created_at: string
+  plan: {
+    employee?: string
+    role?: string
+    readiness?: number
+    sections?: { id: string }[]
+    doneItems?: string[]
+    generatedAt?: string
+  }
+}
 
 export function OnboardingPage() {
   const navigate = useNavigate()
-  const [list, setList] = useState<Record<string, unknown>[]>(ONBOARDINGS as unknown as Record<string, unknown>[])
-  useEffect(() => {
-    api.onboardings().then((res) => {
-      if (res && res.onboardings.length > 0) setList(res.onboardings)
-    })
-  }, [])
-  const { pushToast } = useAppStore()
+  const [rows, setRows] = useState<OnboardingListItem[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  // Normalise les lignes API (snake_case + plan jsonb) vers la forme d'affichage.
-  const view = list.map((raw) => {
-    const o = raw as Record<string, unknown>
-    const plan = (o.plan ?? {}) as Record<string, unknown>
-    return {
-      id: String(o.id),
-      employeeName: String(o.employee_name ?? plan.employee ?? 'Employé'),
-      roleTitle: String(o.role_title ?? plan.role ?? ''),
-      startDate: String(plan.generatedAt ?? o.created_at ?? '').slice(0, 10),
-      readiness: Number(plan.readiness ?? 0),
-      progress: Number(plan.readiness ?? 0),
-      builtFrom: [] as string[],
-      sections: [] as unknown[],
+  const load = useCallback(async () => {
+    setError(null)
+    const res = await api.onboardings()
+    if (res === null) {
+      setError('Impossible de charger les onboardings — backend indisponible.')
+      setRows([])
+      return
     }
-  })
+    setRows(res.onboardings as unknown as OnboardingListItem[])
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const progressOf = (o: OnboardingListItem): number => {
+    const sections = o.plan?.sections?.length ?? 0
+    const done = o.plan?.doneItems?.length ?? 0
+    return sections > 0 ? Math.round((done / sections) * 100) : 0
+  }
 
   return (
     <div>
@@ -43,46 +56,72 @@ export function OnboardingPage() {
         title="Intégration"
         subtitle="Chaque nouvel arrivant démarre avec la mémoire de son rôle."
         actions={
-          <Button
-            leadingIcon={adaptIcon(PlusSignIcon, 20)}
-            onClick={() => pushToast("Création d'onboarding — démo : parcours simulé créé.")}
-          >
+          <Button leadingIcon={adaptIcon(PlusSignIcon, 20)} onClick={() => navigate('/people')}>
             Nouvel onboarding
           </Button>
         }
       />
 
+      {error && (
+        <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+
       <div className="space-y-3">
-        {view.map((o) => (
-          <div
-            key={String(o.id)}
-            className="flex flex-wrap items-center gap-4 rounded-2xl border border-border-button-default bg-background-primary-default p-4 shadow-card"
-          >
-            <PersonAvatar name={o.employeeName} size="md" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-body-medium font-medium text-text-primary">{o.employeeName}</p>
-              <p className="text-caption-1-medium text-text-secondary">
-                Nouveau {o.roleTitle} · arrive le {o.startDate}
-              </p>
-            </div>
+        {rows === null ? (
+          <Card>
+            <p className="text-body-2-medium text-text-tertiary">Chargement des onboardings…</p>
+          </Card>
+        ) : rows.length === 0 ? (
+          <Card>
+            <p className="text-body-2-medium text-text-secondary">
+              Aucun onboarding en cours — créez un handover puis générez le parcours du successeur.
+            </p>
+          </Card>
+        ) : (
+          rows.map((o) => {
+            const readiness = Number(o.plan?.readiness ?? 0)
+            const progress = progressOf(o)
+            const employeeName = o.employee_name || o.plan?.employee || 'Employé'
+            return (
+              <div
+                key={o.id}
+                className="flex flex-wrap items-center gap-4 rounded-2xl border border-border-button-default bg-background-primary-default p-4 shadow-card"
+              >
+                <PersonAvatar name={employeeName} size="md" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-body-medium font-medium text-text-primary">{employeeName}</p>
+                  <p className="text-caption-1-medium text-text-secondary">
+                    Nouveau {o.role_title || o.plan?.role || ''} · démarré le{' '}
+                    {(o.created_at ?? o.plan?.generatedAt ?? '').slice(0, 10)}
+                  </p>
+                </div>
 
-            <div className="hidden w-64 md:block">
-              <ProgressRow label="Préparation" value={Number(o.readiness)} tone="success" compact />
-            </div>
+                <div className="hidden w-64 md:block">
+                  <ProgressRow label={`Parcours ${progress} %`} value={progress} tone="success" compact />
+                </div>
 
-            <ScoreRing value={Number(o.readiness)} size={64} tone="success" label="Prêt" />
+                <ScoreRing value={readiness} size={64} tone="success" label="Prêt" />
 
-            <div className="flex gap-2">
-              <Button size="small" onClick={() => navigate(`/onboarding/${String(o.id)}`)}>
-                Ouvrir l'onboarding
-              </Button>
-            </div>
-          </div>
-        ))}
+                <div className="flex gap-2">
+                  <Button size="small" onClick={() => navigate(`/onboarding/${o.id}`)}>
+                    Ouvrir l'onboarding
+                  </Button>
+                </div>
+              </div>
+            )
+          })
+        )}
 
         <Card title="Construit à partir de">
           <ul className="grid gap-2 sm:grid-cols-2">
-            {ONBOARDINGS[0].builtFrom.map((b) => (
+            {[
+              'Role Brain — la mémoire validée du rôle',
+              'Handover du prédécesseur — entretien et réponses',
+              'Projets actifs — ce qui tourne aujourd\'hui',
+              'Company Brain — les documents de l\'organisation',
+            ].map((b) => (
               <li key={b} className="flex items-center gap-2.5 rounded-xl border border-border-button-default px-3.5 py-2.5">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent-100 text-caption-2-semibold text-accent-700">
                   {b[0]}
