@@ -39,7 +39,7 @@ n/a sans objet · 🔍 à vérifier écran par écran.
 | `/agents/new` | ❌ store | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
 | `/agents/:id` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `/automations` | ❌ store | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
-| `/approvals` | ❌ store (API GET ✓) | ❌ store (API POST ✓) | 🔍 | ❌ | ❌ | ✅ serveur | ❌ |
+| `/approvals` | ✅ GET /approvals | ✅ approve/reject (anti double-clic, erreur 400 affichée) | 🔍 rôle gate serveur ✓ | ✅ | ✅ (persisté, vérifié E2E) | ✅ serveur | ✅ cycle E2E prouvé |
 | `/activity` | 🟡 GET /audit | n/a | 🔍 | ❌ | ✅ | ✅ | ❌ |
 | `/integrations` | ✅ | 🟡 | ✅ admin | ❌ | ✅ | ✅ | 🟡 |
 | `/settings` | ❌ mock | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
