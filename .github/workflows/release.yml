@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version du tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Vérifier la cohérence tag ↔ package.json ↔ CHANGELOG
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          if [ "${{ steps.ver.outputs.version }}" != "$PKG" ]; then
+            echo "tag ${{ steps.ver.outputs.version }} ≠ package.json $PKG"; exit 1
+          fi
+          grep -q "$(printf '## v%s' "${{ steps.ver.outputs.version }}")" CHANGELOG.md || {
+            echo "CHANGELOG.md : pas d'entrée '## v${{ steps.ver.outputs.version }}'"; exit 1; }
+
+      - name: Gates + build (qualité release)
+        run: |
+          npm ci
+          npm run check:sql && npm run check:frontend
+          npm run typecheck:server && npx tsc --noEmit
+          npm run build
+
+      - name: GitHub Release (changelog)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk "/^## v${{ steps.ver.outputs.version }}/{f=1;next} /^## v/{f=0} f" CHANGELOG.md > notes.md
+          gh release create "${{ github.ref_name }}" \
+            --title "Companion ${{ steps.ver.outputs.version }}" \
+            --notes-file notes.md
+
+      # Publier la version au Control Center — best-effort : la release
+      # GitHub existe déjà si le CC est injoignable (secrets absents en dev).
+      - name: Notifier le Control Center
+        if: ${{ vars.CC_RELEASE_URL != '' }}
+        env:
+          CC_TOKEN: ${{ secrets.CC_RELEASE_TOKEN }}
+        run: |
+          NOTES=$(awk "/^## v${{ steps.ver.outputs.version }}/{f=1;next} /^## v/{f=0} f" CHANGELOG.md)
+          code=$(curl -s -o /tmp/cc-resp.json -w "%{http_code}" -X POST "${{ vars.CC_RELEASE_URL }}/admin/api/releases" \
+            -H "x-admin-token: $CC_TOKEN" -H "content-type: application/json" \
+            -d "$(jq -n --arg v "${{ steps.ver.outputs.version }}" --arg n "$NOTES" \
+                  '{version:$v, channel:"stable", notes:$n}')")
+          echo "CC répond $code : $(cat /tmp/cc-resp.json)"
+          [[ "$code" == 200* ]] || echo "::warning::Control Center injoignable — publiez la version manuellement."

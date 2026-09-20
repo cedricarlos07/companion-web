@@ -14,6 +14,7 @@ import { licenseGate } from './services/license-mode.js'
 import { startHandover, answerInterviewQuestion, generateHandoverPack } from './services/handover.js'
 import { generateOnboarding } from './services/onboarding.js'
 import { ollamaStatus } from './providers/ollama.js'
+import { APP_VERSION } from './version.js'
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md', '.csv']
 
@@ -741,13 +742,15 @@ export function buildApiRouter(dbh: DbHandle): Router {
     try {
       const r = await fetch(`${updateServer}/releases/latest`, { signal: AbortSignal.timeout(5000) })
       if (!r.ok) return res.json({ available: false, reason: `réponse ${r.status}` })
-      const data = (await r.json()) as { version?: string; channel?: string }
-      const installed = '1.0.0'
+      const data = (await r.json()) as { version?: string; channel?: string; notes?: string; url?: string }
+      const installed = APP_VERSION
       res.json({
         available: Boolean(data.version && data.version !== installed),
         installed,
         latest: data.version ?? null,
         channel: data.channel ?? 'stable',
+        notes: data.notes ?? '',
+        url: data.url ?? null,
       })
     } catch (err) {
       res.json({ available: false, reason: String(err).slice(0, 120) })

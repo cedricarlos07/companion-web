@@ -1,5 +1,30 @@
 # Changelog — Companion
 
+## v1.0.1 (2026-09-20)
+
+Phase anti-mock terminée — allowlist zéro — loop commercial prouvé.
+
+### Continuité (toutes routes réelles)
+- people/:id : statut (déclenche le Handover Agent), génération d'onboarding
+- roles/:id : cible de couverture éditable (auditée), vrais pourcentages
+- ask : enregistrement en mémoire réelle, abstention déterministe par périmètre
+- settings : organisation, membres + invitations, IA épinglée, sauvegardes
+- portail client : branché sur l'API du Control Center (token par licence)
+
+### Corrections moteur
+- Fuite de périmètre /ask : filtres réappliqués à l'hydratation Mem0/fusion
+- MCP : alias SQL manquant sur la recherche scopée (cassé depuis le
+  paramétrage) ; seed démo réparé (batch memories invalide)
+- Statut 'contradicted' manquant côté frontend (crash Company Brain)
+
+### Licensing & updates
+- update.sh : mise à jour instance en une commande (backup → tag → build)
+- /system/update-check : version réelle + notes de version du Control Center
+
+### CI
+- Gates (SQL, anti-mock, typechecks, build) sur push/PR
+- Release automatisée : tag → GitHub Release + publication au Control Center
+
 ## v1.0.0-pilot (2026-09-17)
 
 Première version figée pour les pilotes clients.

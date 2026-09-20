@@ -6,6 +6,7 @@ import { runMigrations } from './db/migrate.js'
 import { buildApiRouter } from './routes.js'
 import { seedDatabase } from './seed.js'
 import { config } from './config.js'
+import { APP_VERSION } from './version.js'
 import { ensureUploadsDir } from './services/ingestion.js'
 import { checkAiHealth } from './ai-settings.js'
 import { memorySearchEngine, reindexMemoriesFromDb } from './memory/index.js'
@@ -119,7 +120,7 @@ async function main() {
   app.listen(config.port, () => {
     console.log(`[companion] API prête sur http://localhost:${config.port} (driver: ${dbh.driver}, moteur mémoire: ${memorySearchEngine()})`)
     // Self-hosted Connected : heartbeat licence quotidien (métadonnées seulement, best-effort).
-    void import('./services/license-mode.js').then(({ startLicenseHeartbeat }) => startLicenseHeartbeat(dbh, '1.0.0'))
+    void import('./services/license-mode.js').then(({ startLicenseHeartbeat }) => startLicenseHeartbeat(dbh, APP_VERSION))
   })
 }
 
