@@ -22,6 +22,8 @@ export interface SessionUser {
   employee_id: string | null
   org_name?: string
   instance_url?: string | null
+  sector?: string | null
+  country?: string | null
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T | null> {
@@ -109,6 +111,8 @@ export interface AgentRunRow {
 export interface AgentTriggerRow {
   id: string
   event_type: string
+  /** Présent sur GET /triggers (tous les triggers), absent sur GET /agents/:id. */
+  agent_key?: string
   skill: string
   enabled: boolean
   rate_limit_per_hour: number
@@ -483,5 +487,55 @@ export const api = {
 
   toggleTrigger(id: string) {
     return command<{ ok: boolean }>(`/triggers/${id}/toggle`, {})
+  },
+
+  /* ------------------------- Paramètres (config réelle) -------------------- */
+
+  async triggers() {
+    return call<{ triggers: AgentTriggerRow[] }>('/triggers')
+  },
+
+  async users() {
+    return call<{ users: { id: string; email: string; name: string; app_role: string; active: boolean; last_active_at: string | null; employee_id: string | null }[] }>('/users')
+  },
+
+  async invitations() {
+    return call<{ invitations: { id: string; email: string; role: string; status: string; expires_at: string; invited_by_name: string | null }[] }>('/invitations')
+  },
+
+  createInvitation(email: string, role: string) {
+    return command<{ invitationId: string; devToken?: string }>('/invitations', { email, role })
+  },
+
+  updateOrganization(input: { name: string; sector?: string; country?: string }) {
+    return command<{ organization: { name: string; sector: string | null; country: string | null } }>('/organizations/current', input)
+  },
+
+  async aiSettings() {
+    return call<{ settings: { provider: string; chatModel: string; embedModel: string; embedDim: number } }>('/system/ai/settings')
+  },
+
+  setAiSettings(input: { chatModel?: string; embedModel?: string }) {
+    return command<{ settings: { provider: string; chatModel: string; embedModel: string; embedDim: number } }>('/system/ai/settings', input)
+  },
+
+  async systemHealth() {
+    return call<{
+      engine: string
+      provider: Record<string, unknown> & { ok?: boolean; provider?: string }
+      ai: { ok: boolean; degraded: boolean; provider: string; chatModel: string; embedModel: string; availableModels: string[]; issues: string[] }
+    }>('/system/memory-provider/health')
+  },
+
+  async securityCheck() {
+    return call<{ ok: boolean; issues: string[]; checkedAt: string }>('/security/check')
+  },
+
+  async backups() {
+    return call<{ backups: { dir: string; manifest: { version: string; createdAt: string; tables: Record<string, number>; uploadsCount: number } | null }[] }>('/backups')
+  },
+
+  createBackup() {
+    return command<{ backupDir: string }>('/backup', {})
   },
 }

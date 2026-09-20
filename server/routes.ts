@@ -44,8 +44,8 @@ export function buildApiRouter(dbh: DbHandle): Router {
   })
 
   api.get('/auth/me', authRequired(dbh), async (req, res) => {
-    const rows = await dbh.query<{ id: string; email: string; name: string; app_role: string; organization_id: string; employee_id: string | null; org_name: string; instance_url: string | null }>(
-      `SELECT u.id, u.email, u.name, u.app_role, u.organization_id, u.employee_id, o.name AS org_name, o.instance_url
+    const rows = await dbh.query<{ id: string; email: string; name: string; app_role: string; organization_id: string; employee_id: string | null; org_name: string; instance_url: string | null; sector: string | null; country: string | null }>(
+      `SELECT u.id, u.email, u.name, u.app_role, u.organization_id, u.employee_id, o.name AS org_name, o.instance_url, o.sector, o.country
        FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = $1`, [req.user!.id],
     )
     if (!rows[0]) return res.status(401).json({ error: 'compte introuvable' })
@@ -461,6 +461,9 @@ export function buildApiRouter(dbh: DbHandle): Router {
     const { email, role } = req.body as { email?: string; role?: string }
     if (!email || !role) return res.status(400).json({ error: 'email et role requis' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'adresse email invalide' })
+    if (!['employee', 'manager', 'admin', 'auditor'].includes(role)) {
+      return res.status(400).json({ error: 'rôle invalide — employee, manager, admin ou auditor' })
+    }
     const { createInvitation } = await import('./services/auth-completion.js')
     const result = await createInvitation(dbh, req.user!.organizationId, email, role, req.user!.id, req.user!.name)
     await audit(dbh, req.user!.organizationId, {
@@ -963,6 +966,39 @@ export function buildApiRouter(dbh: DbHandle): Router {
       ORDER BY created_at DESC LIMIT 100
     `, [req.user!.organizationId, kind && kind !== 'all' ? kind : null])
     res.json({ events: rows })
+  })
+
+  /* --------------------------- Comptes & organisation ----------------------- */
+
+  api.get('/users', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const rows = await dbh.query(
+      `SELECT u.id, u.email, u.name, u.app_role, u.active, u.last_active_at::text AS last_active_at, u.employee_id
+       FROM users u WHERE u.organization_id = $1::uuid ORDER BY u.created_at`, [req.user!.organizationId],
+    )
+    res.json({ users: rows })
+  })
+
+  api.post('/organizations/current', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { name, sector, country } = req.body as { name?: string; sector?: string; country?: string }
+    const trimmedName = (name ?? '').trim()
+    if (trimmedName.length < 2) return res.status(400).json({ error: 'nom requis (2 caractères minimum)' })
+    const current = (
+      await dbh.query<{ name: string; sector: string | null; country: string | null }>(
+        `SELECT name, sector, country FROM organizations WHERE id = $1::uuid`, [req.user!.organizationId],
+      )
+    )[0]
+    if (!current) return res.status(404).json({ error: 'organisation introuvable' })
+    const nextSector = sector === undefined ? current.sector : (sector.trim() || null)
+    const nextCountry = country === undefined ? current.country : (country.trim() || null)
+    await dbh.exec(
+      `UPDATE organizations SET name = $1, sector = $2, country = $3 WHERE id = $4::uuid`,
+      [trimmedName, nextSector, nextCountry, req.user!.organizationId],
+    )
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'org.updated', targetType: 'organization', targetId: req.user!.organizationId,
+      detail: { name: trimmedName, sector: nextSector, country: nextCountry },
+    })
+    res.json({ organization: { name: trimmedName, sector: nextSector, country: nextCountry } })
   })
 
   /* -------------------------------- Seed ----------------------------------- */

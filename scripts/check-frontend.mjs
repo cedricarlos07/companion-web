@@ -30,7 +30,6 @@ const ALLOWLIST = [
   'src/pages/memory-detail.tsx',
   'src/pages/people.tsx',
   'src/pages/roles.tsx',
-  'src/pages/settings.tsx',
   'src/pages/sources.tsx',
   'src/pages/portal/dashboard.tsx',
   'src/pages/portal/license.tsx',
