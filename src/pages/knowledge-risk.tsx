@@ -7,22 +7,19 @@ import { Button } from '@/components/base/buttons/button'
 import { HugeIcon } from '@/components/ui/huge-icon'
 import {
   Alert02Icon,
-  Exchange01Icon,
-  FileValidationIcon,
+  HierarchyIcon,
   ShieldAlertIcon,
-  TaskIcon,
+  FileValidationIcon,
   UserGroupIcon,
 } from '@/lib/icons'
-import { CRITICAL_DEPENDENCIES } from '@/data/org'
 import { api } from '@/services/api'
 import { cx } from '@/utils/cx'
 
-interface RiskPerson {
+interface RiskRole {
   subjectId: string
   subjectName: string
   score: number
   level: string
-  factors: { key: string; label: string; value: number; weight: number; detail: string }[]
 }
 
 function riskBarColor(value: number): string {
@@ -34,27 +31,19 @@ function riskBarColor(value: number): string {
 
 export function KnowledgeRiskPage() {
   const navigate = useNavigate()
-  const [data, setData] = useState<{
-    overall: number
-    level: string
-    criticalPeople: number
-    criticalRoles: number
-    singleOwnerProcedures: number
-    employees: RiskPerson[]
-  } | null>(null)
+  const [data, setData] = useState<NonNullable<Awaited<ReturnType<typeof api.knowledgeRisk>>> | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
     api.knowledgeRisk().then((res) => {
-      if (res) setData(res)
+      if (res === null) setError('Analyse de risque indisponible — backend injoignable.')
+      else setData(res)
     })
   }, [])
 
-  const overall = data?.overall ?? 31
-  const criticalPeople = data?.criticalPeople ?? 4
-  const criticalRoles = data?.criticalRoles ?? 3
-  const singleOwnerProcedures = data?.singleOwnerProcedures ?? 27
-  const ranked = data?.employees?.slice(0, 6) ?? []
+  const ranked = (data?.employees ?? []).slice(0, 6)
+  const criticalRoles = (data?.roles ?? []).filter((r: RiskRole) => r.level === 'critical' || r.level === 'high').slice(0, 4)
   const levelLabel =
     data?.level === 'critical' ? 'Critique'
     : data?.level === 'high' ? 'Élevé'
@@ -73,18 +62,26 @@ export function KnowledgeRiskPage() {
         }
       />
 
+      {error && (
+        <div role="alert" className="rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+
       {/* Overall */}
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         <Card>
           <div className="flex flex-col items-center gap-2 py-2">
             <ScoreRing
-              value={overall}
+              value={data?.overall ?? 0}
               label="Risque global"
-              tone={overall >= 70 ? 'critical' : overall >= 40 ? 'warning' : 'success'}
+              tone={(data?.overall ?? 0) >= 70 ? 'critical' : (data?.overall ?? 0) >= 40 ? 'warning' : 'success'}
             />
-            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-caption-1-semibold text-amber-800">
-              {levelLabel}
-            </span>
+            {data && (
+              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-caption-1-semibold text-amber-800">
+                {levelLabel}
+              </span>
+            )}
             <p className="max-w-56 text-center text-caption-1-medium text-text-tertiary">
               Score explicable : single-owner 30 % · couverture 25 % · fraîcheur 15 % · diversité des
               sources 10 % · préparation du transfert 20 %.
@@ -93,24 +90,28 @@ export function KnowledgeRiskPage() {
         </Card>
 
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard label="Personnes critiques" value={String(criticalPeople)} icon={UserGroupIcon} tone="critical" />
-          <StatCard label="Rôles critiques" value={String(criticalRoles)} icon={ShieldAlertIcon} tone="critical" />
+          <StatCard label="Personnes critiques" value={data ? String(data.criticalPeople) : '…'} icon={UserGroupIcon} tone="critical" />
+          <StatCard label="Rôles critiques" value={data ? String(data.criticalRoles) : '…'} icon={ShieldAlertIcon} tone="critical" />
           <StatCard
             label="Procédures à propriétaire unique"
-            value={String(singleOwnerProcedures)}
+            value={data ? String(data.singleOwnerProcedures) : '…'}
             icon={FileValidationIcon}
             tone="critical"
           />
-          <StatCard label="Tâches récurrentes non documentées" value="14" icon={TaskIcon} tone="critical" />
+          <StatCard label="Personnes suivies" value={data ? String(data.employees.length) : '…'} icon={UserGroupIcon} />
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Risk by person — ranked, expluable, données réelles */}
-        <Card title={data ? 'Risque par personne' : 'Risque par rôle'}>
-          {ranked.length === 0 ? (
+        {/* Risk by person — ranked, explicable, données réelles */}
+        <Card title="Risque par personne">
+          {data === null && !error ? (
             <p className="py-6 text-center text-body-2-regular text-text-tertiary">
               Calcul du risque en cours…
+            </p>
+          ) : ranked.length === 0 ? (
+            <p className="py-6 text-center text-body-2-regular text-text-secondary">
+              Aucun employé suivi — importez des sources pour construire la mémoire.
             </p>
           ) : (
             <ul className="space-y-4">
@@ -170,43 +171,38 @@ export function KnowledgeRiskPage() {
           )}
         </Card>
 
-        {/* Critical dependencies */}
+        {/* Critical dependencies — rôles critiques réels */}
         <Card title="Dépendances critiques">
-          <ul className="space-y-2.5">
-            {CRITICAL_DEPENDENCIES.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-center gap-3 rounded-xl border border-border-button-default px-3.5 py-3"
-              >
-                <HugeIcon
-                  icon={d.id === 'dep-clients' ? Exchange01Icon : Alert02Icon}
-                  size="md"
-                  className="shrink-0 text-rose-500"
-                />
-                <p className="min-w-0 flex-1 text-body-2-medium text-text-primary">{d.text}</p>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  onClick={() =>
-                    d.href.startsWith('/people')
-                      ? navigate(d.href)
-                      : d.id === 'dep-tasks'
-                        ? navigate('/handovers/new/emp-moussa')
-                        : navigate('/knowledge-risk')
-                  }
+          {criticalRoles.length === 0 ? (
+            <p className="py-6 text-center text-body-2-regular text-text-secondary">
+              Aucun rôle critique détecté.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {criticalRoles.map((r) => (
+                <li
+                  key={r.subjectId}
+                  className="flex items-center gap-3 rounded-xl border border-border-button-default px-3.5 py-3"
                 >
-                  Résoudre
-                </Button>
-              </li>
-            ))}
-          </ul>
+                  <HugeIcon icon={HierarchyIcon} size="md" className="shrink-0 text-rose-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-body-2-medium text-text-primary">{r.subjectName}</p>
+                    <p className="text-caption-1-medium text-text-tertiary">Rôle · risque {r.score} %</p>
+                  </div>
+                  <Button variant="secondary" size="xs" onClick={() => navigate(`/roles/${r.subjectId}`)}>
+                    Résoudre
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="mt-4 rounded-xl bg-background-secondary-default p-3.5">
             <p className="text-caption-1-medium text-text-secondary">
               Recommandation : lancez un entretien de connaissances avec les personnes critiques. Companion
               transformera leurs réponses en procédures vérifiées.
             </p>
-            <Button size="xs" className="mt-2" onClick={() => navigate('/handovers/new/emp-moussa')}>
-              Préparer le départ de Moussa
+            <Button size="xs" className="mt-2" onClick={() => navigate('/handovers/new')}>
+              Préparer un transfert
             </Button>
           </div>
         </Card>

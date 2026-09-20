@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { PersonAvatar } from '@/components/common/person-avatar'
@@ -9,15 +9,11 @@ import { Input } from '@/components/base/input/input'
 import { Select, SelectItem } from '@/components/base/select/select'
 import { adaptIcon } from '@/components/ui/huge-icon'
 import { UserAdd01Icon, Search01Icon } from '@/lib/icons'
-import { EMPLOYEES, fullName } from '@/data/employees'
 import { api } from '@/services/api'
 import { useAppStore } from '@/store/app-store'
-import type { Employee, EmployeeStatus, RiskLevel } from '@/types'
+import type { Employee, EmployeeStatus, RiskLevel, Role } from '@/types'
 
-const STATUS_LABELS: Record<
-  EmployeeStatus,
-  { label: string; cls: string }
-> = {
+const STATUS_LABELS: Record<EmployeeStatus, { label: string; cls: string }> = {
   active: { label: 'Actif', cls: 'bg-status-lime-background text-status-lime-text' },
   leaving: { label: 'En départ', cls: 'bg-status-rose-background text-status-rose-text' },
   onboarding: { label: 'Arrivant', cls: 'bg-status-blue-background text-status-blue-text' },
@@ -35,23 +31,75 @@ const RISK_LABELS: Record<RiskLevel | 'all', string> = {
   healthy: 'Sain',
 }
 
+function fullName(e: Employee) {
+  return `${e.firstName} ${e.lastName}`
+}
+
 export function PeoplePage() {
   const navigate = useNavigate()
   const { pushToast } = useAppStore()
-  const [allEmployees, setAllEmployees] = useState<Employee[]>(EMPLOYEES)
+  const [allEmployees, setAllEmployees] = useState<Employee[] | null>(null)
+  const [roles, setRoles] = useState<Role[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [dept, setDept] = useState('all')
   const [risk, setRisk] = useState<RiskLevel | 'all'>('all')
   const [status, setStatus] = useState<EmployeeStatus | 'all'>('all')
 
-  // Données réelles quand le backend répond — fallback mock sinon.
-  useEffect(() => {
-    api.employees().then((real) => {
-      if (real && real.length > 0) setAllEmployees(real)
-    })
+  // Formulaire d'ajout (POST /employees réel).
+  const [addOpen, setAddOpen] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [roleId, setRoleId] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  const load = useCallback(async () => {
+    setError(null)
+    const real = await api.employees()
+    if (real === null) {
+      setError('Impossible de charger les personnes — backend indisponible.')
+      setAllEmployees([])
+      return
+    }
+    setAllEmployees(real)
   }, [])
 
-  const departments = useMemo(() => [...new Set(allEmployees.map((e) => e.department))], [allEmployees])
+  useEffect(() => {
+    void load()
+    api.roles().then((r) => {
+      if (r) setRoles(r)
+    })
+  }, [load])
+
+  async function addEmployee() {
+    if (adding) return
+    if (firstName.trim().length < 2 || lastName.trim().length < 2 || !email.includes('@')) {
+      pushToast('Prénom, nom et email valides requis.', 'error')
+      return
+    }
+    setAdding(true)
+    const res = await api.createEmployee({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim(),
+      roleId: roleId || undefined,
+    })
+    setAdding(false)
+    if (res === null) {
+      pushToast('Création impossible — email déjà utilisé ou permission manquante.', 'error')
+      return
+    }
+    pushToast(`${firstName.trim()} ${lastName.trim()} ajouté·e.`, 'success')
+    setAddOpen(false)
+    setFirstName('')
+    setLastName('')
+    setEmail('')
+    setRoleId('')
+    void load()
+  }
+
+  const departments = useMemo(() => [...new Set((allEmployees ?? []).map((e) => e.department))], [allEmployees])
 
   const deptItems = [{ id: 'all', label: 'Tous les départements' }, ...departments.map((d) => ({ id: d, label: d }))]
   const riskItems = RISKS.map((r) => ({ id: r, label: RISK_LABELS[r] }))
@@ -68,14 +116,14 @@ export function PeoplePage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return allEmployees.filter((e) => {
+    return (allEmployees ?? []).filter((e) => {
       if (dept !== 'all' && e.department !== dept) return false
       if (risk !== 'all' && e.risk !== risk) return false
       if (status !== 'all' && e.status !== status) return false
       if (q && !`${fullName(e)} ${e.roleTitle}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [query, dept, risk, status])
+  }, [allEmployees, query, dept, risk, status])
 
   return (
     <div>
@@ -83,14 +131,46 @@ export function PeoplePage() {
         title="Personnes"
         subtitle="Le savoir de chaque collaborateur, capturé et exploitable."
         actions={
-          <Button
-            leadingIcon={adaptIcon(UserAdd01Icon, 20)}
-            onClick={() => pushToast("Formulaire d'ajout — démo : employé simulé ajouté.")}
-          >
+          <Button leadingIcon={adaptIcon(UserAdd01Icon, 20)} onClick={() => setAddOpen((o) => !o)}>
             Ajouter un employé
           </Button>
         }
       />
+
+      {error && (
+        <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+
+      {addOpen && (
+        <div className="mb-4 rounded-2xl border border-border-button-default bg-background-primary-default p-4 shadow-card">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Input label="Prénom" value={firstName} onChange={setFirstName} placeholder="Awa" />
+            <Input label="Nom" value={lastName} onChange={setLastName} placeholder="Traoré" />
+            <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="awa.traore@entreprise.ci" />
+            <Select
+              aria-label="Rôle"
+              selectedKey={roleId}
+              onSelectionChange={(k) => setRoleId(String(k))}
+              items={[{ id: '', label: 'Sans rôle' }, ...roles.map((r) => ({ id: r.id, label: r.title }))]}
+              renderValue={<span className="truncate">{roles.find((r) => r.id === roleId)?.title ?? 'Sans rôle'}</span>}
+            >
+              {[{ id: '', label: 'Sans rôle' }, ...roles.map((r) => ({ id: r.id, label: r.title }))].map((item) => (
+                <SelectItem key={item.id} id={item.id} textValue={item.label}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </Select>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Button onClick={() => void addEmployee()} disabled={adding}>
+              {adding ? 'Création…' : 'Créer'}
+            </Button>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>Annuler</Button>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Input
@@ -150,12 +230,14 @@ export function PeoplePage() {
           <span>Risque</span>
           <span>Statut</span>
         </div>
-        {filtered.length === 0 ? (
+        {allEmployees === null ? (
+          <p className="px-4 py-4 text-body-2-medium text-text-tertiary">Chargement des personnes…</p>
+        ) : filtered.length === 0 ? (
           <EmptyState
             title="Aucun collaborateur trouvé."
             detail="Ajustez vos filtres ou ajoutez un collaborateur."
             action={
-              <Button leadingIcon={adaptIcon(UserAdd01Icon, 18)} onClick={() => pushToast('Invitation prête.')}>
+              <Button leadingIcon={adaptIcon(UserAdd01Icon, 18)} onClick={() => setAddOpen(true)}>
                 Ajouter un employé
               </Button>
             }

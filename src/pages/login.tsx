@@ -4,18 +4,18 @@ import { useNavigate } from 'react-router-dom'
 import { adaptIcon } from '@/components/ui/huge-icon'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
-import { LoginIcon, ShieldUserIcon } from '@/lib/icons'
-import { ORG } from '@/data/org'
-import { assertMockAllowed } from '@/lib/mock'
+import { LoginIcon } from '@/lib/icons'
+import { MOCK_ALLOWED, assertMockAllowed } from '@/lib/mock'
 import { api } from '@/services/api'
 
 /** Minimal enterprise login — no illustration, just the essentials. */
 export function LoginPage() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('ange.niamke@kamaloka.ci')
-  const [password, setPassword] = useState('companion')
+  const [email, setEmail] = useState(MOCK_ALLOWED ? 'ange.niamke@kamaloka.ci' : '')
+  const [password, setPassword] = useState(MOCK_ALLOWED ? 'companion' : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [forgotSent, setForgotSent] = useState<string | null>(null)
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -37,6 +37,32 @@ export function LoginPage() {
       return
     }
     setError('Connexion impossible : backend indisponible ou identifiants invalides.')
+  }
+
+  async function forgot() {
+    if (!email.includes('@')) {
+      setError('Renseignez votre email pour recevoir un lien de réinitialisation.')
+      return
+    }
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; devToken?: string; error?: string } | null
+      if (!res.ok || !body?.ok) {
+        setError(body?.error ?? 'Demande impossible.')
+        return
+      }
+      setForgotSent(
+        body.devToken
+          ? `Mode dev — utilisez le token de réinitialisation : ${body.devToken.slice(0, 10)}…`
+          : 'Si un compte existe pour cet email, un lien de réinitialisation a été envoyé.',
+      )
+    } catch {
+      setError('Erreur réseau — la demande n\'a pas abouti.')
+    }
   }
 
   return (
@@ -87,27 +113,21 @@ export function LoginPage() {
                 {error}
               </p>
             )}
+            {forgotSent && (
+              <p className="text-body-2-medium text-text-secondary">{forgotSent}</p>
+            )}
             <Button type="submit" leadingIcon={adaptIcon(LoginIcon, 20)} className="w-full justify-center" disabled={busy}>
               {busy ? 'Connexion…' : 'Se connecter'}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              leadingIcon={adaptIcon(ShieldUserIcon, 20)}
-              className="w-full justify-center"
-              onClick={() => navigate('/home')}
-            >
-              Continuer avec SSO
+            <Button type="button" variant="ghost" className="w-full justify-center" onClick={() => void forgot()}>
+              Mot de passe oublié ?
             </Button>
           </form>
         </div>
       </div>
 
       <footer className="flex items-center justify-center gap-2 border-t border-separator-border px-4 py-4 text-caption-1-medium text-text-tertiary">
-        <span>Instance</span>
-        <span className="rounded-md bg-background-secondary-default px-2 py-0.5 text-body-2-medium text-text-secondary">
-          {ORG.instance}
-        </span>
+        <span>Companion</span>
         <span>· Données auto-hébergées</span>
       </footer>
     </div>

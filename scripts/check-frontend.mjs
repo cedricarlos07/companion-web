@@ -19,16 +19,10 @@ import path from 'node:path'
 const SRC = path.resolve('src')
 
 /** Pages/composants qui consomment encore des fixtures — travail restant.
- *  Retirer une ligne = page branchée sur l'API réelle et auditée. */
+ *  Les 6 pages portail sont du mock CONSENTI : le backend du portail est le
+ *  Control Center KamaLoka (projet séparé) — à brancher quand il expose son
+ *  API. Toute autre entrée ici est une page non terminée. */
 const ALLOWLIST = [
-  'src/pages/activity.tsx',
-  'src/pages/automations.tsx',
-  'src/pages/brain.tsx',
-  'src/pages/knowledge-risk.tsx',
-  'src/pages/login.tsx',
-  'src/pages/memory-detail.tsx',
-  'src/pages/people.tsx',
-  'src/pages/roles.tsx',
   'src/pages/portal/dashboard.tsx',
   'src/pages/portal/license.tsx',
   'src/pages/portal/downloads.tsx',
@@ -36,8 +30,6 @@ const ALLOWLIST = [
   'src/pages/portal/invoices.tsx',
   'src/pages/portal/support.tsx',
   'src/pages/portal/portal-layout.tsx',
-  'src/components/layout/app-sidebar.tsx',
-  'src/components/layout/global-search.tsx',
 ]
 
 function* walk(dir) {

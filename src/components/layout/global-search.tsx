@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
-import { useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cx } from '@/utils/cx'
 import { HugeIcon } from '@/components/ui/huge-icon'
@@ -8,19 +7,13 @@ import {
   BotIcon,
   Database01Icon,
   Exchange01Icon,
-  File01Icon,
-  Folder01Icon,
   HierarchyIcon,
   Search01Icon,
   UserGroupIcon,
   ArrowRight02Icon,
 } from '@/lib/icons'
 import { Kbd } from '@/components/base/kbd/kbd'
-import { EMPLOYEES, fullName } from '@/data/employees'
-import { ROLES } from '@/data/roles'
-import { MEMORIES } from '@/data/memories'
-import { CLIENTS, PROJECTS } from '@/data/workspace'
-import { HANDOVERS } from '@/data/continuity'
+import { api, type AgentListRow } from '@/services/api'
 
 interface SearchEntry {
   id: string
@@ -31,70 +24,50 @@ interface SearchEntry {
   href: string
 }
 
-const GROUP_ORDER = [
-  'Personnes',
-  'Connaissances',
-  'Rôles',
-  'Clients',
-  'Projets',
-  'Sources',
-  'Agents',
-  'Transferts',
-] as const
+const GROUP_ORDER = ['Personnes', 'Connaissances', 'Rôles', 'Agents', 'Transferts', 'Sources'] as const
 
-function buildIndex(): SearchEntry[] {
-  return [
-    ...EMPLOYEES.map<SearchEntry>((e) => ({
-      id: e.id,
-      group: 'Personnes',
-      icon: UserGroupIcon,
-      title: fullName(e),
-      meta: e.roleTitle,
-      href: `/people/${e.id}`,
-    })),
-    ...MEMORIES.map<SearchEntry>((m) => ({
-      id: m.id,
-      group: 'Connaissances',
-      icon: AiBrain01Icon,
-      title: m.title,
-      meta: m.roleTitle,
-      href: `/brain/${m.id}`,
-    })),
-    ...ROLES.map<SearchEntry>((r) => ({
-      id: r.id,
-      group: 'Rôles',
-      icon: HierarchyIcon,
-      title: r.title,
-      meta: `${r.currentEmployees} employés`,
-      href: `/roles/${r.id}`,
-    })),
-    ...CLIENTS.map<SearchEntry>((c) => ({
-      id: c.id,
-      group: 'Clients',
-      icon: File01Icon,
-      title: c.name,
-      meta: c.industry,
-      href: '/brain',
-    })),
-    ...PROJECTS.map<SearchEntry>((p) => ({
-      id: p.id,
-      group: 'Projets',
-      icon: Folder01Icon,
-      title: p.name,
-      meta: p.status === 'active' ? 'Actif' : p.status === 'at-risk' ? 'À risque' : 'En clôture',
-      href: '/brain',
-    })),
-    { id: 'grp-sources', group: 'Sources', icon: Database01Icon, title: 'Sources', meta: 'Connecteurs de données', href: '/sources' },
-    { id: 'grp-agents', group: 'Agents', icon: BotIcon, title: 'Agents', meta: 'Agents actifs', href: '/agents' },
-    ...HANDOVERS.map<SearchEntry>((h) => ({
-      id: h.id,
-      group: 'Transferts',
-      icon: Exchange01Icon,
-      title: `Handover — ${h.employeeName}`,
-      meta: h.roleTitle,
-      href: `/handovers/${h.id}`,
-    })),
-  ]
+/** Index construit sur les données réelles de l'organisation. */
+async function buildIndex(): Promise<SearchEntry[]> {
+  const [employees, memories, roles, agents, handovers] = await Promise.all([
+    api.employees(),
+    api.memories(),
+    api.roles(),
+    api.agents(),
+    api.handovers(),
+  ])
+  const entries: SearchEntry[] = []
+  for (const e of employees ?? []) {
+    entries.push({
+      id: e.id, group: 'Personnes', icon: UserGroupIcon,
+      title: `${e.firstName} ${e.lastName}`, meta: e.roleTitle, href: `/people/${e.id}`,
+    })
+  }
+  for (const m of (memories ?? []).slice(0, 80)) {
+    entries.push({
+      id: m.id, group: 'Connaissances', icon: AiBrain01Icon,
+      title: m.title, meta: m.scope, href: `/brain/${m.id}`,
+    })
+  }
+  for (const r of roles ?? []) {
+    entries.push({
+      id: r.id, group: 'Rôles', icon: HierarchyIcon,
+      title: r.title, meta: `${r.currentEmployees} en poste`, href: `/roles/${r.id}`,
+    })
+  }
+  for (const a of (agents ?? { agents: [] as AgentListRow[] }).agents ?? []) {
+    entries.push({
+      id: a.id, group: 'Agents', icon: BotIcon,
+      title: a.name, meta: a.key, href: `/agents/${a.id}`,
+    })
+  }
+  for (const h of handovers ?? []) {
+    entries.push({
+      id: h.id, group: 'Transferts', icon: Exchange01Icon,
+      title: `Handover — ${h.employeeName}`, meta: h.roleTitle, href: `/handovers/${h.id}`,
+    })
+  }
+  entries.push({ id: 'grp-sources', group: 'Sources', icon: Database01Icon, title: 'Sources', meta: 'Connecteurs de données', href: '/sources' })
+  return entries
 }
 
 /** ⌘K global command search with grouped results and keyboard navigation. */
@@ -103,7 +76,18 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
-  const index = useMemo(buildIndex, [])
+  const [index, setIndex] = useState<SearchEntry[]>([])
+  const [loadingIndex, setLoadingIndex] = useState(false)
+
+  // L'index réel se charge au premier appel — jamais de données codées.
+  useEffect(() => {
+    if (!open || index.length > 0 || loadingIndex) return
+    setLoadingIndex(true)
+    void buildIndex().then((entries) => {
+      setIndex(entries)
+      setLoadingIndex(false)
+    })
+  }, [open, index.length, loadingIndex])
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -200,7 +184,12 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           <Kbd>Échap</Kbd>
         </div>
         <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox" aria-label="Résultats">
-          {flat.length === 0 && (
+          {loadingIndex && (
+            <p className="px-3 py-8 text-center text-body-2-regular text-text-tertiary">
+              Chargement de l'index de recherche…
+            </p>
+          )}
+          {!loadingIndex && flat.length === 0 && (
             <p className="px-3 py-8 text-center text-body-2-regular text-text-tertiary">
               Aucun résultat pour « {query} ».
             </p>
