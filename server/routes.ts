@@ -902,7 +902,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
       : doneItems.filter((k) => k !== key)
     await dbh.db
       .update(onboardings)
-      .set({ plan: { ...plan, doneItems: doneItemsNext }, updatedAt: new Date() })
+      .set({ plan: { ...plan, doneItems: doneItemsNext } })
       .where(eq(onboardings.id, String(req.params.id)))
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: done ? 'onboarding.step_done' : 'onboarding.step_undone',
