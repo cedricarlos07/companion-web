@@ -71,3 +71,36 @@ ACTIVEPIECES_PROJECT_ID=<project id>
 
 Companion provisionne automatiquement les flows (Drive, Gmail, etc.) au démarrage.
 Le client n'interagit qu'avec le bouton **"Connecter"** dans l'UI Companion — OAuth Google géré par Activepieces.
+
+---
+
+## Publier une mise à jour (KamaLoka) / Se mettre à jour (clients)
+
+### Côté KamaLoka — publier
+
+```bash
+# 1. Bump version + entrée CHANGELOG (## vX.Y.Z obligatoire)
+npm version patch        # 1.0.1 → 1.0.2
+# 2. Rédiger l'entrée ## vX.Y.Z dans CHANGELOG.md
+git add -A && git commit -m "release: vX.Y.Z …"
+git tag vX.Y.Z && git push origin main --follow-tags   # tag annoté ou push explicite du tag
+```
+
+Le workflow `release.yml` vérifie la cohérence tag ↔ package.json ↔ CHANGELOG,
+passe les gates + build, crée la **GitHub Release** (notes du changelog) puis
+enregistre la version au Control Center (variables de repo `CC_RELEASE_URL` +
+secret `CC_RELEASE_TOKEN` — étape sautée proprement si absentes).
+
+### Côté client self-hosted — se mettre à jour
+
+```bash
+./update.sh --check      # une nouvelle version est-elle disponible ?
+./update.sh              # backup → git checkout vX.Y.Z → build docker → santé
+# (l'app affiche aussi « mise à jour disponible » : /api/system/update-check,
+#  et le portail client liste les versions sur /portal/downloads)
+```
+
+Philosophie : **informatif d'abord, jamais d'update appliqué en cachette** —
+l'instance annonce la disponibilité (app + portail), l'admin du client
+applique avec `./update.sh` (backup automatique des données avant tout).
+Migrations SQL versionnées et idempotentes.
