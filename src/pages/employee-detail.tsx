@@ -18,6 +18,7 @@ import {
 } from '@/lib/icons'
 import { api, mapEmployee, mapMemory } from '@/services/api'
 import { formatNumber } from '@/lib/format'
+import { useAppStore } from '@/store/app-store'
 import type { Employee, Memory } from '@/types'
 
 interface RiskData {
@@ -30,20 +31,28 @@ interface RiskData {
 export function EmployeeDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { pushToast } = useAppStore()
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [memories, setMemories] = useState<Memory[]>([])
   const [risk, setRisk] = useState<RiskData | null>(null)
   const [handovers, setHandovers] = useState<{ id: string; status: string; readiness: number; created_at: string }[]>([])
   const [onboardings, setOnboardings] = useState<{ id: string; created_at: string }[]>([])
   const [notFound, setNotFound] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [statusPending, setStatusPending] = useState(false)
+  const [onboardingPending, setOnboardingPending] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
     setLoading(true)
+    setError(null)
     const res = await api.employee(id)
     if (res === null || !res.employee) {
-      setNotFound(true)
+      // Distingue 404 d'un backend indisponible.
+      const list = await api.employees()
+      if (list === null) setError('Profil indisponible — backend injoignable.')
+      else setNotFound(!list.some((e) => e.id === id))
       setLoading(false)
       return
     }
@@ -74,11 +83,47 @@ export function EmployeeDetailPage() {
     void load()
   }, [load])
 
+  async function changeStatus(next: Employee['status']) {
+    if (statusPending || !employee) return
+    setStatusPending(true)
+    const res = await api.setEmployeeStatus(employee.id, next)
+    if (res === null) {
+      setStatusPending(false)
+      pushToast('Changement impossible — permission refusée ou backend indisponible.', 'error')
+      return
+    }
+    // « En départ » déclenche le trigger réel employee.leaving (Handover Agent).
+    let triggered = 0
+    if (next === 'leaving') {
+      const evt = await api.dispatchEvent('employee.leaving', { employeeId: employee.id })
+      triggered = evt.ok ? (evt.data.started?.length ?? 0) : 0
+    }
+    setStatusPending(false)
+    setEmployee((e) => (e ? { ...e, status: next } : e))
+    pushToast(
+      triggered > 0
+        ? 'Statut « En départ » enregistré — Handover Agent démarré par le déclencheur.'
+        : 'Statut mis à jour.',
+      'success',
+    )
+  }
+
+  async function generateOnboarding() {
+    if (onboardingPending || !employee) return
+    setOnboardingPending(true)
+    const res = await api.generateOnboarding(employee.id)
+    setOnboardingPending(false)
+    if (res === null) {
+      pushToast('Génération impossible — une intégration existe peut-être déjà, ou permission refusée.', 'error')
+      return
+    }
+    pushToast('Parcours d\'intégration généré depuis le Role Brain.', 'success')
+    navigate(`/onboarding/${res.onboarding.id}`)
+  }
 
   const employeeMemories = memories
 
   if (notFound) {
-    if (loading) return <EmptyState title="Chargement du profil…" />
     return (
       <EmptyState
         title="Collaborateur introuvable."
@@ -87,7 +132,16 @@ export function EmployeeDetailPage() {
     )
   }
   if (!employee) {
-    return <EmptyState title="Chargement du profil…" />
+    return (
+      <div>
+        {error && (
+          <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+            {error}
+          </div>
+        )}
+        <EmptyState title="Chargement du profil…" />
+      </div>
+    )
   }
 
   const name = `${employee.firstName} ${employee.lastName}`
@@ -113,10 +167,28 @@ export function EmployeeDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" leadingIcon={adaptIcon(AiChat02Icon, 20)} onClick={() => navigate('/ask')}>
             Demander à Companion
           </Button>
+          {employee.status === 'former' ? (
+            <Button variant="secondary" disabled={statusPending} onClick={() => void changeStatus('active')}>
+              {statusPending ? '…' : 'Réactiver le compte'}
+            </Button>
+          ) : employee.status === 'leaving' ? (
+            <Button variant="secondary" disabled={statusPending} onClick={() => void changeStatus('former')}>
+              {statusPending ? '…' : 'Marquer comme parti'}
+            </Button>
+          ) : (
+            <Button variant="secondary" disabled={statusPending} onClick={() => void changeStatus('leaving')}>
+              {statusPending ? '…' : 'Marquer en départ'}
+            </Button>
+          )}
+          {employee.status !== 'former' && onboardings.length === 0 && (
+            <Button variant="secondary" disabled={onboardingPending} onClick={() => void generateOnboarding()}>
+              {onboardingPending ? 'Génération…' : "Générer l'intégration"}
+            </Button>
+          )}
           <Button leadingIcon={adaptIcon(Exchange01Icon, 20)} onClick={() => navigate(`/handovers/new/${employee.id}`)}>
             Préparer le départ
           </Button>

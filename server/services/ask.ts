@@ -76,18 +76,21 @@ export async function askCompanion(
 
   // $1 = organisation, $2..N = clause d'accès, puis filtres optionnels nullables.
   let n = 1 + access.params.length
-  const optParams: unknown[] = []
+  // Filtres optionnels réutilisés par le path native ET l'hydratation Mem0 —
+  // les placeholders sont renumérotés selon la requête consommatrice.
+  const optSpecs: { clause: (i: number) => string; value: unknown }[] = []
+  if (filters.type) optSpecs.push({ clause: (i) => `m.type = $${i}::text`, value: filters.type })
+  if (filters.scope) optSpecs.push({ clause: (i) => `m.scope = $${i}::text`, value: filters.scope })
+  if (filters.roleId) optSpecs.push({ clause: (i) => `(m.role_id = $${i}::uuid OR m.employee_id IN (SELECT id FROM employees WHERE role_id = $${i}))`, value: filters.roleId })
+  if (filters.employeeId) optSpecs.push({ clause: (i) => `(m.employee_id = $${i}::uuid OR m.contributor = (SELECT first_name || ' ' || last_name FROM employees WHERE id = $${i}))`, value: filters.employeeId })
+  if (filters.departmentId) optSpecs.push({ clause: (i) => `m.department_id = $${i}::uuid`, value: filters.departmentId })
   const optClauses: string[] = []
-  const opt = (clause: (i: number) => string, value: unknown) => {
+  const optParams: unknown[] = []
+  for (const spec of optSpecs) {
     n++
-    optParams.push(value)
-    optClauses.push(clause(n))
+    optClauses.push(spec.clause(n))
+    optParams.push(spec.value)
   }
-  if (filters.type) opt((i) => `m.type = $${i}::text`, filters.type)
-  if (filters.scope) opt((i) => `m.scope = $${i}::text`, filters.scope)
-  if (filters.roleId) opt((i) => `(m.role_id = $${i}::uuid OR m.employee_id IN (SELECT id FROM employees WHERE role_id = $${i}))`, filters.roleId)
-  if (filters.employeeId) opt((i) => `(m.employee_id = $${i}::uuid OR m.contributor = (SELECT first_name || ' ' || last_name FROM employees WHERE id = $${i}))`, filters.employeeId)
-  if (filters.departmentId) opt((i) => `m.department_id = $${i}::uuid`, filters.departmentId)
   const whereAccess = {
     text: [
       `m.organization_id = $1::uuid`,
@@ -146,6 +149,13 @@ export async function askCompanion(
     if (ids.length === 0) return []
     const hydrateAccess = memoryAccessClause(actor ?? { kind: 'user', organizationId, appRole: 'owner' }, organizationId, 2)
     const likeIdx = 2 + hydrateAccess.params.length
+    // Les filtres optionnels (périmètre employé/rôle/…) sont RÉAPPLIQUÉS ici :
+    // Mem0 ne connaît pas les filtres, l'hydratation SQL reste source de vérité.
+    let hn = likeIdx
+    const hOptClauses = optSpecs.map((spec) => {
+      hn++
+      return spec.clause(hn)
+    })
     return await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
           SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
                  m.contributor, m.updated_at::text AS updated_at,
@@ -157,7 +167,8 @@ export async function askCompanion(
           FROM memories m
           WHERE m.id = ANY($1::uuid[])
             AND ${hydrateAccess.text}
-        `, [ids, ...hydrateAccess.params, like])
+            ${hOptClauses.length > 0 ? `AND ${hOptClauses.join('\n            AND ')}` : ''}
+        `, [ids, ...hydrateAccess.params, like, ...optSpecs.map((o) => o.value)])
   }
 
   if (engine === 'mem0') {

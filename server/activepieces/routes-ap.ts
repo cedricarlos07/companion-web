@@ -21,6 +21,24 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
     res.json(health)
   })
 
+  /** Secret du webhook d'ingestion : généré/renvoyé une seule fois (owner/admin).
+   *  Nécessaire pour configurer le flow Activepieces « Drive → Companion ». */
+  router.post('/webhook-secret', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const crypto = await import('node:crypto')
+    const secret = crypto.randomBytes(24).toString('hex')
+    await dbh.exec(
+      `INSERT INTO settings (organization_id, key, value, updated_at)
+       VALUES ($1::uuid, 'webhook_secret', $2::jsonb, now())
+       ON CONFLICT (organization_id, key) DO UPDATE SET value = excluded.value, updated_at = now()`,
+      [req.user!.organizationId, JSON.stringify(secret)],
+    )
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'integration.webhook_secret_set', targetType: 'integration', targetId: 'activepieces',
+      detail: {},
+    })
+    res.json({ secret })
+  })
+
   /** Webhook : Activepieces pousse un fichier (auth Bearer secret requis). */
   router.post('/webhooks/activepieces/file', async (req, res) => {
     if (!isActivepiecesEnabled()) {

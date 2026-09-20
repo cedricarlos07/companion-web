@@ -8,7 +8,7 @@
  *
  * Usage : node scripts/test-frontend-real.mjs [--keep]
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
@@ -48,9 +48,12 @@ child.stdout.on('data', (d) => { serverLog += d })
 child.stderr.on('data', (d) => { serverLog += d })
 
 const cleanup = () => {
-  child.kill()
-  if (!keep) setTimeout(() => fs.rmSync(dataDir, { recursive: true, force: true }), 1500)
-  else console.log(`data dir conservé : ${dataDir}`)
+  // Sous Windows, child.kill() ne termine pas l'arbre tsx — taskkill /T requis,
+  // sinon la suite ne rend jamais la main et bloque les chaînes &&.
+  if (process.platform === 'win32' && child.pid) {
+    try { spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }) } catch { /* déjà parti */ }
+  } else child.kill()
+  try { if (!keep) fs.rmSync(dataDir, { recursive: true, force: true }) } catch { /* windows lock */ }
 }
 process.on('exit', () => cleanup())
 const watchdog = setTimeout(() => {
@@ -236,16 +239,49 @@ await page.waitForFunction(
 )
 step('9. /brain : mémoire réelle chargée (aucun état de chargement bloqué)', true)
 
+// 10. /ask : réponse réelle avec citations + abstention honnête.
+await page.goto(`${BASE}/ask`, { waitUntil: 'domcontentloaded' })
+await page.fill('textarea', "Quelles pièces sont exigées pour un appel d’offres chez Orange CI ?")
+await page.keyboard.press('Enter')
+await page.waitForSelector('text=Réponse de Companion', { timeout: 120000 })
+const askMain = await page.locator('main').innerText()
+const cited = await page.locator('text=Sources utilisées').count()
+step(
+  '10. /ask : réponse citée (sources affichées)',
+  askMain.length > 50 && cited >= 1,
+)
+// Abstention déterministe : périmètre = l'employée créée à l'étape 3 (zéro
+// mémoire) → le moteur DOIT s'abstenir plutôt qu'inventer (clause d'accès).
+const emps = await page.evaluate(async () => {
+  const r = await fetch('/api/employees', { credentials: 'include' })
+  return r.json()
+})
+const awa = (emps.employees ?? []).find((e) => String(e.email).includes('awa.realdata'))
+const abstainRes = await page.evaluate(async (employeeId) => {
+  const r = await fetch('/api/ask', {
+    method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question: 'Quelle est la procédure interne de ce poste ?', employeeId }),
+  })
+  return r.json()
+}, awa?.id)
+step(
+  '10b. /ask : abstention déterministe sur périmètre sans mémoire',
+  abstainRes?.abstained === true && (abstainRes?.citations ?? []).length === 0,
+  abstainRes?.abstained ? 'abstained' : `répondu avec ${(abstainRes?.citations ?? []).length} citations`,
+)
+
 // Console : aucun console.error inattendu.
 await page.screenshot({ path: 'gui-test-screenshots/frontend-real-final.png' })
 await browser.close()
 const realErrors = consoleErrors.filter((e) => !e.includes('401') && !e.includes('Failed to load resource') && !e.includes('403'))
-step('10. console : aucun console.error inattendu', realErrors.length === 0, realErrors.slice(0, 2).join(' | '))
+step('12. console : aucun console.error inattendu', realErrors.length === 0, realErrors.slice(0, 2).join(' | '))
 
 console.log('\n━━━━━ SYNTHÈSE FRONTEND REAL DATA ━━━━━')
 clearTimeout(watchdog)
 if (failures.length === 0) {
   console.log(`🏆 FRONTEND REAL DATA : ${pass}/${pass + failures.length} vérifications passées.`)
+cleanup()
+process.exit(0)
 } else {
   console.error(`💥 FRONTEND REAL DATA : ${failures.length} échec(s) / ${pass + failures.length}`)
   for (const f of failures) console.error('   - ' + f)

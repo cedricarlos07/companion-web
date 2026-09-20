@@ -7,10 +7,12 @@ import { RiskBadge, KnowledgeTypeBadge } from '@/components/common/badges'
 import { EmptyState } from '@/components/common/states'
 import { ProgressRow } from '@/components/common/progress'
 import { Button } from '@/components/base/buttons/button'
+import { Input } from '@/components/base/input/input'
 import { Tabs, TabList, Tab, TabPanel } from '@/components/base/tabs/tabs'
 import { AiBrain01Icon, FileValidationIcon, GavelIcon, UserGroupIcon, ChartColumnIcon } from '@/lib/icons'
 import { api } from '@/services/api'
 import { formatNumber } from '@/lib/format'
+import { useAppStore } from '@/store/app-store'
 import { cx } from '@/utils/cx'
 
 import type { KnowledgeType } from '@/types'
@@ -43,7 +45,7 @@ interface RoleRisk {
 }
 
 interface RoleBrainData {
-  role: { id: string; title: string; department: string }
+  role: { id: string; title: string; department: string; coverage_target?: number }
   memories: RoleMemory[]
   contributors: Contributor[]
   risk: RoleRisk | null
@@ -52,18 +54,44 @@ interface RoleBrainData {
 export function RoleBrainPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { pushToast } = useAppStore()
   const [data, setData] = useState<RoleBrainData | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [targetDraft, setTargetDraft] = useState('')
+  const [targetPending, setTargetPending] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
+    setError(null)
     const res = await api.role(id)
     if (res === null || !res.role) {
-      setNotFound(true)
+      const list = await api.roles()
+      if (list === null) setError('Role Brain indisponible — backend injoignable.')
+      else setNotFound(true)
       return
     }
     setData(res as unknown as RoleBrainData)
+    setTargetDraft(String(Number((res.role as { coverage_target?: number }).coverage_target ?? 90)))
   }, [id])
+
+  async function saveTarget() {
+    if (targetPending || !id) return
+    const value = Math.floor(Number(targetDraft))
+    if (!Number.isFinite(value) || value < 30 || value > 100) {
+      pushToast('La cible doit être un entier entre 30 et 100.', 'error')
+      return
+    }
+    setTargetPending(true)
+    const res = await api.setRoleCoverageTarget(id, value)
+    setTargetPending(false)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    setData((d) => (d ? { ...d, role: { ...d.role, coverage_target: res.data.coverageTarget } } : d))
+    pushToast('Cible de couverture enregistrée.', 'success')
+  }
 
   useEffect(() => {
     void load()
@@ -78,7 +106,16 @@ export function RoleBrainPage() {
     )
   }
   if (!data) {
-    return <EmptyState title="Chargement du Role Brain…" />
+    return (
+      <div>
+        {error && (
+          <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+            {error}
+          </div>
+        )}
+        <EmptyState title="Chargement du Role Brain…" />
+      </div>
+    )
   }
 
   const role = data.role
@@ -88,9 +125,10 @@ export function RoleBrainPage() {
 
   const count = (types: string[]) => roleMemories.filter((m) => types.includes(m.type)).length
   const filteredByTab = (types: string[]) => roleMemories.filter((m) => types.includes(m.type))
-  const coverage = roleMemories.length > 0
-    ? Math.round((count(['procedure', 'decision']) / roleMemories.length) * 100)
+  const pct = (types: string[]) => roleMemories.length > 0
+    ? Math.round((count(types) / roleMemories.length) * 100)
     : 0
+  const coverage = pct(['procedure', 'decision'])
   const maxContrib = Math.max(1, ...contributors.map((c) => c.contributions))
 
   return (
@@ -199,9 +237,26 @@ export function RoleBrainPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Couverture">
               <div className="space-y-3">
-                <ProgressRow label="Procédures documentées" value={coverage} />
-                <ProgressRow label="Décisions avec rationale" value={Math.max(40, coverage - 12)} />
-                <ProgressRow label="Leçons partagées" value={Math.min(96, coverage + 8)} />
+                <ProgressRow label="Procédures documentées" value={pct(['procedure'])} />
+                <ProgressRow label="Décisions archivées" value={pct(['decision'])} />
+                <ProgressRow label="Leçons partagées" value={pct(['lesson'])} />
+                <div className="flex flex-wrap items-end gap-2 border-t border-separator-border pt-3">
+                  <div className="min-w-40 flex-1">
+                    <Input
+                      label="Cible de couverture du rôle (%)"
+                      value={targetDraft}
+                      onChange={setTargetDraft}
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    disabled={targetPending || Number(targetDraft) === (role.coverage_target ?? 90)}
+                    onClick={() => void saveTarget()}
+                  >
+                    {targetPending ? '…' : 'Enregistrer'}
+                  </Button>
+                </div>
               </div>
             </Card>
             <Card title="Connaissances récentes du rôle">

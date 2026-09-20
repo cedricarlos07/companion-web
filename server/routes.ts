@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import fs from 'node:fs'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { DbHandle } from './db/client.js'
 import { documents, sources, memories, employees, roles, departments, memoryVersions, memorySources, onboardings, users, handovers } from './db/schema.js'
 import { authenticate, issueToken, setAuthCookie, clearAuthCookie, authRequired, requireRole } from './auth.js'
@@ -181,7 +181,12 @@ export function buildApiRouter(dbh: DbHandle): Router {
     if (!['active', 'leaving', 'onboarding', 'former'].includes(status)) {
       return res.status(400).json({ error: 'statut invalide' })
     }
-    await dbh.db.update(employees).set({ status }).where(eq(employees.id, String(req.params.id)))
+    const updated = await dbh.db
+      .update(employees)
+      .set({ status })
+      .where(and(eq(employees.id, String(req.params.id)), eq(employees.organizationId, req.user!.organizationId)))
+      .returning({ id: employees.id })
+    if (updated.length === 0) return res.status(404).json({ error: 'employé introuvable' })
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'employee.status_changed', targetType: 'employee', targetId: String(req.params.id),
       detail: { status },
@@ -210,7 +215,12 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   api.get('/roles/:id', authRequired(dbh), async (req, res) => {
     const id = String(req.params.id)
-    const role = await dbh.query(`SELECT r.id, r.title, d.name AS department FROM roles r LEFT JOIN departments d ON d.id = r.department_id WHERE r.id = $1`, [id])
+    const role = await dbh.query(
+      `SELECT r.id, r.title, d.name AS department, r.coverage_target
+       FROM roles r LEFT JOIN departments d ON d.id = r.department_id
+       WHERE r.id = $1 AND r.organization_id = $2::uuid`,
+      [id, req.user!.organizationId],
+    )
     if (!role[0]) return res.status(404).json({ error: 'rôle introuvable' })
     const mems = await dbh.query(`SELECT id, type, title, content, scope, status, confidence, importance, contributor, employee_id, updated_at::text AS updated_at FROM memories WHERE role_id = $1::uuid AND status NOT IN ('rejected','superseded') ORDER BY importance DESC`, [id])
     const contributors = await dbh.query(`
@@ -222,6 +232,25 @@ export function buildApiRouter(dbh: DbHandle): Router {
     `, [id])
     const risk = await computeRoleRisk(dbh, req.user!.organizationId, id)
     res.json({ role: role[0], memories: mems, contributors, risk })
+  })
+
+  api.post('/roles/:id/coverage-target', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { coverageTarget } = req.body as { coverageTarget?: number }
+    const value = Math.floor(Number(coverageTarget))
+    if (!Number.isFinite(value) || value < 30 || value > 100) {
+      return res.status(400).json({ error: 'coverageTarget doit être un entier entre 30 et 100' })
+    }
+    const updated = await dbh.db
+      .update(roles)
+      .set({ coverageTarget: value })
+      .where(and(eq(roles.id, String(req.params.id)), eq(roles.organizationId, req.user!.organizationId)))
+      .returning({ id: roles.id })
+    if (updated.length === 0) return res.status(404).json({ error: 'rôle introuvable' })
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'role.coverage_target_changed', targetType: 'role', targetId: String(req.params.id),
+      detail: { coverageTarget: value },
+    })
+    res.json({ ok: true, coverageTarget: value })
   })
 
   api.post('/memories/:id/promote', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {

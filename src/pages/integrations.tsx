@@ -38,6 +38,7 @@ export function IntegrationsPage() {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [apHealth, setApHealth] = useState<{ enabled: boolean; ok: boolean } | null>(null)
   const [connectedNames, setConnectedNames] = useState<Set<string>>(new Set())
 
@@ -49,6 +50,7 @@ export function IntegrationsPage() {
     ]).then(([cat, ap, src]) => {
       if (cat?.pieces?.length) setCatalog(cat.pieces)
       if (ap) setApHealth(ap)
+      if (!cat) setError('Catalogue d’intégrations indisponible — Activepieces est-il configuré ?')
       if (src?.sources) {
         // Map connected source names to catalog piece names
         const connected = new Set<string>()
@@ -94,6 +96,12 @@ export function IntegrationsPage() {
         }
       />
 
+      {error && (
+        <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+
       {/* Search */}
       <div className="mb-4">
         <Input
@@ -133,7 +141,7 @@ export function IntegrationsPage() {
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {featuredList.map((p) => (
-              <IntegrationCard key={p.name} piece={p} connected={isConnected(p.name)} />
+              <IntegrationCard key={p.name} piece={p} connected={isConnected(p.name)} apEnabled={apHealth?.enabled === true && apHealth.ok} />
             ))}
           </div>
         </section>
@@ -148,7 +156,7 @@ export function IntegrationsPage() {
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((p) => (
-                <IntegrationCard key={p.name} piece={p} connected={isConnected(p.name)} />
+                <IntegrationCard key={p.name} piece={p} connected={isConnected(p.name)} apEnabled={apHealth?.enabled === true && apHealth.ok} />
               ))}
             </div>
             {filtered.length === 0 && !loading && (
@@ -172,7 +180,7 @@ export function IntegrationsPage() {
   )
 }
 
-function IntegrationCard({ piece, connected }: { piece: CatalogPiece; connected: boolean }) {
+function IntegrationCard({ piece, connected, apEnabled }: { piece: CatalogPiece; connected: boolean; apEnabled: boolean }) {
   const { pushToast } = useAppStore()
   return (
     <div className={cx(
@@ -204,7 +212,14 @@ function IntegrationCard({ piece, connected }: { piece: CatalogPiece; connected:
         variant={connected ? 'secondary' : 'primary'}
         size="xs"
         className="mt-3 w-full justify-center"
-        onClick={() => pushToast(connected ? `${piece.displayName} — configuration ouverte.` : `${piece.displayName} : connexion via Activepieces.`)}
+        onClick={() => {
+          if (apEnabled) {
+            window.open('/api/integrations/activepieces/health', '_blank', 'noopener')
+            pushToast(`${piece.displayName} se configure dans la console Activepieces de votre instance.`, 'info')
+          } else {
+            pushToast('Connexion impossible : Activepieces n’est pas activé sur cette instance (configuration serveur requise).', 'error')
+          }
+        }}
       >
         {connected ? 'Configurer' : 'Connecter'}
       </Button>

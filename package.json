@@ -24,7 +24,8 @@
     "check:frontend": "node scripts/check-frontend.mjs",
     "test:handover-e2e": "node scripts/test-handover-e2e.mjs",
     "test:handover-ui": "node scripts/test-handover-ui.mjs",
-    "test:frontend-real-data": "node scripts/test-frontend-real.mjs"
+    "test:frontend-real-data": "node scripts/test-frontend-real.mjs",
+    "test:golden-e2e": "node scripts/test-golden-e2e.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.49",

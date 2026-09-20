@@ -8,7 +8,7 @@
  *
  * Usage : node scripts/test-handover-ui.mjs [--keep]
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import net from 'node:net'
@@ -49,9 +49,12 @@ child.stdout.on('data', (d) => { serverLog += d })
 child.stderr.on('data', (d) => { serverLog += d })
 
 const cleanup = () => {
-  child.kill()
-  if (!keep) setTimeout(() => fs.rmSync(dataDir, { recursive: true, force: true }), 1500)
-  else console.log(`data dir conservé : ${dataDir}`)
+  // Sous Windows, child.kill() ne termine pas l'arbre tsx — taskkill /T requis,
+  // sinon la suite ne rend jamais la main et bloque les chaînes &&.
+  if (process.platform === 'win32' && child.pid) {
+    try { spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }) } catch { /* déjà parti */ }
+  } else child.kill()
+  try { if (!keep) fs.rmSync(dataDir, { recursive: true, force: true }) } catch { /* windows lock */ }
 }
 process.on('exit', () => cleanup())
 setTimeout(() => {
@@ -233,6 +236,8 @@ step('console : aucun console.error inattendu', realErrors.length === 0, realErr
 console.log('\n━━━━━ SYNTHÈSE HANDOVER UI ━━━━━')
 if (failures.length === 0) {
   console.log(`🏆 HANDOVER UI : ${pass}/${pass + failures.length} vérifications passées.`)
+cleanup()
+process.exit(0)
 } else {
   console.error(`💥 HANDOVER UI : ${failures.length} échec(s) / ${pass + failures.length}`)
   for (const f of failures) console.error('   - ' + f)

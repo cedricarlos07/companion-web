@@ -293,6 +293,10 @@ export const api = {
     }>(`/roles/${id}`)
   },
 
+  setRoleCoverageTarget(id: string, coverageTarget: number) {
+    return command<{ ok: boolean; coverageTarget: number }>(`/roles/${id}/coverage-target`, { coverageTarget })
+  },
+
   async memories(filters: Record<string, string> = {}) {
     const params = new URLSearchParams(filters)
     const res = await call<{ memories: Record<string, unknown>[] }>(`/memories?${params}`)
@@ -484,6 +488,11 @@ export const api = {
 
   toggleTrigger(id: string) {
     return command<{ ok: boolean }>(`/triggers/${id}/toggle`, {})
+  },
+
+  /** Déclenche un événement métier (ex. employee.leaving) — les triggers actifs démarrent. */
+  dispatchEvent(eventType: string, payload: Record<string, unknown>) {
+    return command<{ started: { runId: string; agentKey: string }[] }>(`/events/${eventType}`, payload)
   },
 
   /* ------------------------- Paramètres (config réelle) -------------------- */
