@@ -92,11 +92,12 @@ export function AppSidebar() {
   const [employeeCount, setEmployeeCount] = useState<number | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
 
-  // Session réelle + compteurs réels (une fois par montage).
+  // Session réelle + compteurs réels (une fois par montage — /status est léger,
+  // pas de calcul de risque comme /overview).
   useEffect(() => {
     api.me().then((res) => setMe(res?.user ?? null))
-    api.overview().then((o) => {
-      if (o) setEmployeeCount(o.stats.employees)
+    api.status().then((s) => {
+      if (s) setEmployeeCount(s.counts.employees)
     })
     api.request<{ approvals: unknown[] }>('/approvals?status=pending').then((res) => {
       if (res) setPendingCount(res.approvals.length)

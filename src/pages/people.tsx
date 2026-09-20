@@ -86,8 +86,8 @@ export function PeoplePage() {
       roleId: roleId || undefined,
     })
     setAdding(false)
-    if (res === null) {
-      pushToast('Création impossible — email déjà utilisé ou permission manquante.', 'error')
+    if (!res.ok) {
+      pushToast(res.error, 'error')
       return
     }
     pushToast(`${firstName.trim()} ${lastName.trim()} ajouté·e.`, 'success')

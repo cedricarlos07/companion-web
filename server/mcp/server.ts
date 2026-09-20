@@ -122,9 +122,9 @@ export function buildCompanionMcpServer(dbh: DbHandle, client: McpCallContext): 
       const ids = [...merged.values()].sort((a, b) => b.semantic - a.semantic).slice(0, limit ?? 8).map((m) => m.id)
       const rows = await dbh.query<{
         id: string; type: string; title: string; content: string; confidence: number; scope: string;
-      }>(`SELECT id, type, title, content, confidence, scope FROM memories
-          WHERE id = ANY($1::uuid[]) AND ${memoryAccessClause(actor(), client.organizationId, 2).text}
-          ORDER BY confidence DESC`, [ids, ...memoryAccessClause(actor(), client.organizationId, 2).params])
+      }>(`SELECT id, type, title, content, confidence, scope FROM memories m
+          WHERE m.id = ANY($1::uuid[]) AND ${memoryAccessClause(actor(), client.organizationId, 2).text}
+          ORDER BY m.confidence DESC`, [ids, ...memoryAccessClause(actor(), client.organizationId, 2).params])
       const withSources = await Promise.all(
         rows.map(async (m) => ({
           memoryId: m.id,

@@ -34,6 +34,7 @@ const STATUSES: (MemoryStatus | 'all')[] = [
   'verified',
   'active',
   'conflicted',
+  'contradicted',
   'deprecated',
   'archived',
 ]

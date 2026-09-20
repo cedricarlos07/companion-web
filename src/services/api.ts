@@ -252,11 +252,8 @@ export const api = {
     }>(`/employees/${id}`)
   },
 
-  async createEmployee(input: { firstName: string; lastName: string; email: string; roleId?: string }) {
-    return call<{ employee: Record<string, unknown> }>('/employees', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    })
+  createEmployee(input: { firstName: string; lastName: string; email: string; roleId?: string }) {
+    return command<{ employee: Record<string, unknown> }>('/employees', input)
   },
 
   async setEmployeeStatus(id: string, status: string) {

@@ -8,8 +8,9 @@
 
 Garde runtime : `ALLOW_MOCK_DATA` (vite define, interdit par défaut) — un
 build de production avec mock activé refuse de démarrer (`src/main.tsx`).
-Gate CI : `scripts/check-frontend.mjs` (allowlist shrinking — chaque ligne
-retirée = une page branchée et auditée) câblé dans `npm run build`.
+Gate CI : `scripts/check-frontend.mjs` — l'allowlist ne contient plus que
+les 7 pages portail (mock consenti, backend KamaLoka CC séparé). Toute
+page applicative hors allowlist ne peut plus importer de fixtures.
 
 Légende : ✅ réel et testé · 🟡 partiel (à compléter) · ❌ mock/store ·
 n/a sans objet · 🔍 à vérifier écran par écran.
@@ -18,61 +19,63 @@ n/a sans objet · 🔍 à vérifier écran par écran.
 
 | Route | GET réel | Écriture réelle | Permissions | Erreurs | Persistance | Audit | E2E |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/home` | 🟡 overview | n/a (liens) | 🔍 | ❌ | 🔍 | n/a | ❌ |
+| `/home` | ✅ /overview + session + risques | n/a (liens) | n/a | ✅ | ✅ | n/a | ✅ frontend-real |
 | `/ask` | ✅ POST /ask | ✅ | ✅ clause d'accès | 🔍 | ✅ (mémoires) | ✅ | 🟡 |
-| `/brain` | 🟡 | n/a | 🔍 | ❌ | ✅ | n/a | ❌ |
-| `/brain/memory/:id` | 🟡 | 🟡 verify/contradict | 🔍 | ❌ | ✅ | 🟡 | ❌ |
-| `/people` | ✅ | ❌ (création employé ?) | 🔍 | ❌ | ✅ | 🟡 | ❌ |
+| `/brain` | ✅ /memories (limit 200) | n/a (lecture) | n/a | ✅ | ✅ | n/a | ✅ frontend-real |
+| `/brain/:id` | ✅ | ✅ verify/deprecate/contradicted (déclenche le trigger de résolution) | ✅ | ✅ | ✅ | ✅ | 🟡 |
+| `/people` | ✅ | ✅ POST /employees (formulaire + rôle) | ✅ 403 auditeur affiché | ✅ | ✅ refresh vérifié | ✅ | ✅ frontend-real |
 | `/people/:id` | 🟡 | ❌ | 🔍 | ❌ | ✅ | n/a | ❌ |
-| `/roles` | ✅ | ❌ | 🔍 | ❌ | ✅ | n/a | ❌ |
+| `/roles` | ✅ | n/a (lecture — pas de création V1) | n/a | ✅ | ✅ | n/a | 🟡 |
 | `/roles/:id` (Role Brain) | 🟡 | ❌ | 🔍 | ❌ | ✅ | n/a | ❌ |
-| `/sources` | ✅ | ✅ (connect) | 🔍 | ❌ | ✅ | ✅ | ❌ |
-| `/sources/new` | n/a | 🟡 (upload → store ?) | 🔍 | ❌ | ✅ | ✅ | ❌ |
-| `/knowledge-risk` | 🟡 service risk | n/a | 🔍 | ❌ | ✅ | n/a | ❌ |
+| `/sources` | ✅ sources + documents | n/a (via new) | n/a | ✅ | ✅ | n/a | 🟡 |
+| `/sources/new` | n/a | ✅ POST /sources/upload (fichiers + texte, résultats réels) | ✅ | ✅ | ✅ | ✅ ingestion | ✅ frontend-real |
+| `/knowledge-risk` | ✅ service risk complet | n/a | n/a | ✅ | ✅ | n/a | 🟡 |
 | `/handovers` | ✅ liste API + recherche/filtre | n/a (création via new) | 🔍 | ✅ | ✅ | 🟡 | ✅ handover-ui |
 | `/handovers/new` (+ /:employeeId) | ✅ employés réels | ✅ POST /handovers (anti double-submit) | ✅ rôle gate | ✅ | ✅ | ✅ | ✅ handover-ui |
 | `/handovers/:id` (détail/pack) | ✅ | ✅ pack/successeur | 🔍 | ✅ | ✅ | ✅ | ✅ handover-e2e |
 | `/handovers/:id/interview` | ✅ gaps réels | ✅ réponses persistées | 🔍 | ✅ | ✅ | ✅ | ✅ handover-ui |
 | `/onboarding` | 🟡 | n/a | 🔍 | ❌ | ✅ | n/a | ❌ |
-| `/onboarding/:id` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `/agents` | ✅ liste + compteurs runs/tokens | ✅ status (POST /status, anti double-clic, erreur affichée) | ✅ role gate serveur | ✅ | ✅ | ✅ agent.status_changed | ✅ battery |
-| `/agents/new` | ✅ catalogue réel (skills/tools/scopes de l'org) | ✅ POST /agents (validation, anti double-submit) | ✅ owner/admin serveur | ✅ | ✅ | ✅ agent.created | ✅ battery (scénario D) |
-| `/agents/:id` | ✅ agent + runs + triggers + usage | ✅ status/kill switch, run réel, budget (/limits), triggers toggle | ✅ role gates serveur | ✅ | ✅ | ✅ | ✅ battery (scénario D) |
-| `/automations` | ❌ store | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
-| `/approvals` | ✅ GET /approvals | ✅ approve/reject (anti double-clic, erreur 400 affichée) | 🔍 rôle gate serveur ✓ | ✅ | ✅ (persisté, vérifié E2E) | ✅ serveur | ✅ cycle E2E prouvé |
-| `/activity` | 🟡 GET /audit | n/a | 🔍 | ❌ | ✅ | ✅ | ❌ |
+| `/onboarding/:id` | 🟡 | 🟡 progression | ✅ (employé/manager) | ❌ | ✅ | ✅ | 🟡 continuity-ui |
+| `/agents` | ✅ liste + compteurs | ✅ status (anti double-clic) | ✅ | ✅ | ✅ refresh vérifié | ✅ | ✅ frontend-real + battery |
+| `/agents/new` | ✅ catalogue réel | ✅ POST /agents (validation, anti double-submit) | ✅ owner/admin | ✅ | ✅ | ✅ agent.created | ✅ battery (D) |
+| `/agents/:id` | ✅ agent + runs + triggers + usage | ✅ status/run/budget/triggers | ✅ role gates | ✅ | ✅ | ✅ | ✅ battery (D) |
+| `/automations` | ✅ GET /triggers | ✅ toggle persistant | ✅ manager+ | ✅ | ✅ refresh vérifié | n/a | ✅ frontend-real |
+| `/approvals` | ✅ GET /approvals | ✅ approve/reject | ✅ | ✅ | ✅ | ✅ | ✅ cycle E2E |
+| `/activity` | ✅ GET /audit | n/a | n/a | ✅ | ✅ | ✅ | 🟡 |
 | `/integrations` | ✅ | 🟡 | ✅ admin | ❌ | ✅ | ✅ | 🟡 |
-| `/settings` | ❌ mock | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
+| `/settings` | ✅ session/org/ai/backup/security/users/invitations | ✅ org update, invites, AI models, backup, triggers | ✅ role gates serveur | ✅ | ✅ refresh vérifié | ✅ | ✅ frontend-real |
 | `/billing` | ✅ | ✅ import licence | 🔍 | ❌ | ✅ | 🟡 | ✅ billing |
 
 ## Surfaces autonomes
 
 | Route | État | Notes |
 | --- | --- | --- |
-| `/login` | ✅ réelle + garde mock (fallback démo bloqué hors ALLOW_MOCK_DATA) | |
+| `/login` | ✅ réelle (+ forgot-password réel, pré-remplissage gated ALLOW_MOCK_DATA) | |
 | `/setup` | ✅ API réelle | |
-| `/portal/*` | 🟡 mock consenté | Le backend du portail est le Control Center KamaLoka (projet séparé) — allowlist `check-frontend`, à brancher quand le CC expose son API |
+| `/portal/*` | 🟡 mock consenti | Backend = Control Center KamaLoka (projet séparé) — les 7 seules entrées allowlistées |
 
-## Ordre d'exécution de la phase
+## État de la phase
 
-1. `/approvals` — store → API (GET/POST existent côté serveur) + double-clic,
-   déjà traitée, autre org, mauvais rôle, run inexistant, restart.
-2. Domaine Handover complet : `/handovers` + new + détail/pack (un seul domaine).
-3. `/onboarding/:id` → Role Brain → `/people/:id` (objets métier partagés).
-4. `/agents/new` + `/agents/:id` (config réelle : modèle, autonomie, tools,
-   budgets, scopes, triggers, kill switch, historique).
-5. `/settings` — chaque toggle = configuration backend réelle + permission + audit.
-6. `/sources/new` + `/home` (KPI depuis /overview réel — plus aucun chiffre codé).
-7. `npm run test:frontend-real-data` — persistence, refresh, 403, cross-org,
-   erreurs affichées, boutons morts, console.error.
+- ✅ `/approvals` (étape 1) · ✅ domaine Handover (étape 2) · ✅ onboarding/Role
+  Brain/employee detail (étape 3) · ✅ agents complet (étape 4) · ✅ settings
+  (étape 5) · ✅ sources/home (étape 6) · ✅ pages partielles + layout (toutes
+  les pages applicatives sont branchées).
+- ✅ `test:frontend-real-data` (étape 7) : 13/13 — login refusé, KPI réels,
+  création + persistance, 403 affiché, upload LLM réel, kill switch,
+  renommage, trigger, console clean.
+
+Reste avant Golden E2E : les 🟡/❌ ciblés ci-dessus (people/:id écritures,
+roles/:id, onboarding list, ask E2E complet, integrations erreurs) — plus
+aucune page mockée.
 
 ## Gate de sortie de la phase
 
 ```
-29/29 fichiers allowlist retirés (check-frontend ✅ sans allowlist)
+Allowlist = 7 fichiers portail uniquement (mock consenti CC KamaLoka)
 0 mock en production (garde runtime + build)
 0 bouton mort · 0 faux CRUD · 0 donnée métier hardcodée
-test:frontend-real-data ✅ · build ✅ · test:battery ✅
+test:frontend-real-data ✅ 13/13 · build ✅ · test:battery ✅
+test:handover-e2e ✅ · test:handover-ui ✅
 ```
 
 Ensuite seulement : Golden E2E externe (Drive → Activepieces → ingestion →

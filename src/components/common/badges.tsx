@@ -67,6 +67,7 @@ const STATUS_META: Record<
   verified: { label: 'Vérifiée', color: 'lime' },
   active: { label: 'Active', color: 'blue' },
   conflicted: { label: 'En conflit', color: 'rose' },
+  contradicted: { label: 'Contradictoire', color: 'rose' },
   deprecated: { label: 'Obsolète', color: 'neutral' },
   archived: { label: 'Archivée', color: 'gray' },
 }
@@ -81,7 +82,8 @@ export function KnowledgeStatusBadge({ status }: { status: MemoryStatus }) {
 }
 
 export function memoryStatusMeta(s: MemoryStatus) {
-  return STATUS_META[s]
+  // Défensif : un statut serveur inconnu ne doit jamais crasher le rendu.
+  return STATUS_META[s] ?? { label: String(s), color: 'neutral' as const }
 }
 
 /* ---------------------------- Risk badges -------------------------------- */

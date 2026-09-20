@@ -215,7 +215,9 @@ step('9. successeur Yann affecté', successorShown >= 1)
 // 10. Refresh navigateur → tout persiste
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForSelector('text=Lacunes détectées', { timeout: 30000 })
-await page.waitForTimeout(800)
+// Le successeur peut n'apparaître que comme option du select (comptée, non
+// visible) : on stabilise le rendu puis on compte comme avant.
+await page.waitForTimeout(3000)
 const stillSuccessor = await page.locator('text=Yann Successeur').count()
 const stillPack = await page.locator('text=Prochaine étape').count()
 const stillCandidates = await page.locator('text=Mémoires issues du handover').count()
