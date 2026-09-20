@@ -13,8 +13,6 @@ import {
   AiBrain01Icon,
   CheckmarkCircle02Icon,
   Copy01Icon,
-  FlagIcon,
-  TaskIcon,
   SparklesIcon,
   TargetIcon,
 } from '@/lib/icons'
@@ -193,28 +191,31 @@ export function AskPage() {
                     variant="secondary"
                     size="xs"
                     leadingIcon={adaptIcon(CheckmarkCircle02Icon, 16)}
-                    onClick={() => pushToast('Réponse enregistrée comme mémoire candidate.')}
+                    onClick={() => {
+                      const res0 = result
+                      const created = fetch('/api/memories', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'fact',
+                          title: res0.question.slice(0, 120),
+                          content: res0.answer.slice(0, 4000),
+                          scope: 'company',
+                          status: 'candidate',
+                          confidence: res0.confidence,
+                        }),
+                      }).then((r) => r.json().catch(() => null)).then((b) => ({ ok: Boolean(b?.memory), id: b?.memory?.id }))
+                      void created.then((c) => {
+                        if (c.ok) pushToast('Mémoire candidate enregistrée — à valider dans Company Brain.', 'success')
+                        else pushToast('Enregistrement impossible — permission ou backend indisponible.', 'error')
+                      })
+                    }}
                   >
                     Enregistrer comme mémoire
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    leadingIcon={adaptIcon(TaskIcon, 16)}
-                    onClick={() => pushToast('Tâche créée et assignée.')}
-                  >
-                    Créer une tâche
-                  </Button>
                   <Button variant="secondary" size="xs" onClick={() => setPhase('idle')}>
                     Continuer
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    leadingIcon={adaptIcon(FlagIcon, 16)}
-                    onClick={() => pushToast('Signalement transmis.', 'info')}
-                  >
-                    Signaler une erreur
                   </Button>
                 </div>
               </Card>

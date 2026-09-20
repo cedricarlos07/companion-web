@@ -48,6 +48,17 @@ async function parseToolResult(result) {
 }
 
 async function main() {
+  /* Mode --clean : supprime tous les clients MCP de test résiduels puis sort. */
+  if (process.argv.includes('--clean')) {
+    const list = await adminApi('/mcp/clients')
+    const testClients = (list.data?.clients ?? []).filter((c) => /^MCP Test /.test(c.name))
+    for (const c of testClients) {
+      await adminApi(`/mcp/clients/${c.id}`, { method: 'DELETE' })
+    }
+    console.log(`🧹 ${testClients.length} client(s) MCP de test supprimé(s).`)
+    return
+  }
+
   /* Création des clients de test via l'API admin. */
   const full = await adminApi('/mcp/clients', {
     method: 'POST',
@@ -228,6 +239,16 @@ async function main() {
     s8blocked = true
   }
   step('S8 — rate limit = BLOCKED', s8blocked)
+
+  /* Nettoyage : les clients de test ne polluent pas l'instance. */
+  const createdIds = [full.data?.clientId, sales.data?.clientId, searchOnly.data?.clientId, expired.data?.clientId, dis.data?.clientId]
+    .filter(Boolean)
+  let cleaned = 0
+  for (const id of createdIds) {
+    const del = await adminApi(`/mcp/clients/${id}`, { method: 'DELETE' })
+    if (del.status === 200) cleaned++
+  }
+  step('Cleanup — clients de test supprimés', cleaned === createdIds.length, `${cleaned}/${createdIds.length}`)
 
   /* ---------------------------- SYNTHÈSE --------------------------------- */
 

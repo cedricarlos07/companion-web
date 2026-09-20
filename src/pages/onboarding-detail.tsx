@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
@@ -20,10 +20,11 @@ import {
   FileValidationIcon,
   ArrowRight02Icon,
 } from '@/lib/icons'
-import { getOnboarding } from '@/data/continuity'
+import { api } from '@/services/api'
+import { useAppStore } from '@/store/app-store'
 import { cx } from '@/utils/cx'
 
-const SECTION_ICONS = {
+const SECTION_ICONS: Record<string, typeof HierarchyIcon> = {
   role: HierarchyIcon,
   customers: HandshakeIcon,
   procedures: FileValidationIcon,
@@ -33,17 +34,79 @@ const SECTION_ICONS = {
   tasks: TaskIcon,
   check: CheckmarkCircle02Icon,
   ask: AiChat02Icon,
-} as const
+}
+
+interface PlanSection {
+  id: string
+  phase: string
+  title: string
+  detail: string
+  icon: string
+  items: string[]
+  from: string
+}
+
+interface Plan {
+  employee?: string
+  role?: string
+  readiness?: number
+  sections?: PlanSection[]
+  generatedAt?: string
+  doneItems?: string[]
+}
+
+interface OnboardingRow {
+  id: string
+  plan: Plan
+  employee_name: string
+  role_title: string | null
+  employee_id: string
+}
 
 export function OnboardingDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const onboarding = id ? getOnboarding(id) : undefined
-  const [doneSections, setDoneSections] = useState<string[]>(
-    onboarding ? onboarding.sections.filter((s) => s.done).map((s) => s.id) : [],
-  )
+  const { pushToast } = useAppStore()
+  const [row, setRow] = useState<OnboardingRow | null>(null)
+  const [notFound, setNotFound] = useState(false)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
 
-  if (!onboarding) {
+  const load = useCallback(async () => {
+    if (!id) return
+    const res = await api.onboarding(id)
+    if (res === null || !res.onboarding) {
+      setNotFound(true)
+      return
+    }
+    setRow(res.onboarding as unknown as OnboardingRow)
+  }, [id])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function toggleStep(sectionId: string) {
+    if (!id || busyKey) return
+    const doneItems = row?.plan?.doneItems ?? []
+    const isDone = doneItems.includes(sectionId)
+    setBusyKey(sectionId)
+    const res = await fetch(`/api/onboardings/${id}/progress`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: sectionId, done: !isDone }),
+    })
+    setBusyKey(null)
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      pushToast(body?.error ?? 'Progression impossible.', 'error')
+      return
+    }
+    pushToast(isDone ? 'Section réouverte.' : 'Section terminée — progression enregistrée.', 'success')
+    await load()
+  }
+
+  if (notFound) {
     return (
       <EmptyState
         title="Parcours d'intégration introuvable."
@@ -51,9 +114,16 @@ export function OnboardingDetailPage() {
       />
     )
   }
+  if (!row) {
+    return <EmptyState title="Chargement du parcours…" />
+  }
 
-  const progress = Math.round((doneSections.length / onboarding.sections.length) * 100)
-  const firstName = onboarding.employeeName.split(' ')[0]
+  const plan = row.plan ?? {}
+  const sections = plan.sections ?? []
+  const doneItems = plan.doneItems ?? []
+  const progress = sections.length > 0 ? Math.round((doneItems.length / sections.length) * 100) : 0
+  const employeeName = row.employee_name || plan.employee || 'Employé'
+  const firstName = employeeName.split(' ')[0]
 
   return (
     <div>
@@ -66,15 +136,13 @@ export function OnboardingDetailPage() {
               Intégration
             </button>
             <span aria-hidden>/</span>
-            <span className="text-text-secondary">{onboarding.employeeName}</span>
+            <span className="text-text-secondary">{employeeName}</span>
           </nav>
         }
         actions={
           <span className="flex items-center gap-2">
-            <PersonAvatar name={onboarding.employeeName} size="sm" />
-            <span className="text-caption-1-medium text-text-secondary">
-              {onboarding.roleTitle} · arrive le {onboarding.startDate}
-            </span>
+            <PersonAvatar name={employeeName} size="sm" />
+            <span className="text-caption-1-medium text-text-secondary">{row.role_title || plan.role}</span>
           </span>
         }
       />
@@ -84,8 +152,8 @@ export function OnboardingDetailPage() {
           <div className="min-w-0 flex-1">
             <ProgressRow label="Progression du parcours" value={progress} tone={progress >= 80 ? 'success' : 'default'} />
             <p className="mt-2 text-caption-1-medium text-text-tertiary">
-              {doneSections.length} / {onboarding.sections.length} sections complétées · construit depuis le
-              Role Brain, le handover de Moussa et le Company Brain.
+              {doneItems.length} / {sections.length} sections complétées · construit depuis le Role Brain,
+              le handover du prédécesseur et le Company Brain.
             </p>
           </div>
           <Button
@@ -99,9 +167,10 @@ export function OnboardingDetailPage() {
       </Card>
 
       <div className="space-y-3">
-        {onboarding.sections.map((s) => {
-          const isDone = doneSections.includes(s.id)
-          const Icon = SECTION_ICONS[s.icon]
+        {sections.map((s) => {
+          const isDone = doneItems.includes(s.id)
+          const Icon = SECTION_ICONS[s.icon] ?? HierarchyIcon
+          const busy = busyKey === s.id
           return (
             <div
               key={s.id}
@@ -122,6 +191,9 @@ export function OnboardingDetailPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-headline-medium text-text-primary">{s.title}</h2>
+                    <span className="rounded-md bg-background-secondary-default px-1.5 py-0.5 text-caption-1-medium text-text-secondary">
+                      {s.phase}
+                    </span>
                     {isDone && (
                       <span className="rounded-md bg-status-lime-background px-1.5 py-0.5 text-caption-1-medium text-status-lime-text">
                         Terminé
@@ -137,15 +209,15 @@ export function OnboardingDetailPage() {
                       </li>
                     ))}
                   </ul>
+                  <p className="mt-1.5 text-caption-1-medium text-text-tertiary">Source : {s.from}</p>
                 </div>
                 <Button
                   variant={isDone ? 'secondary' : 'primary'}
                   size="xs"
-                  onClick={() =>
-                    setDoneSections((list) => (isDone ? list.filter((x) => x !== s.id) : [...list, s.id]))
-                  }
+                  disabled={busy}
+                  onClick={() => void toggleStep(s.id)}
                 >
-                  {isDone ? 'Réouvrir' : 'Marquer terminé'}
+                  {busy ? '…' : isDone ? 'Réouvrir' : 'Marquer terminé'}
                 </Button>
               </div>
             </div>

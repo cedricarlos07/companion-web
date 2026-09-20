@@ -4,6 +4,7 @@ import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
 import { dispatchEvent } from '../mastra/triggers.js'
 import { isActivepiecesEnabled, initializeExternalTools, externalHealth } from '../activepieces/provider.js'
+import { licenseGate } from '../services/license-mode.js'
 import { ingestDocument } from '../services/ingestion.js'
 
 /**
@@ -18,6 +19,24 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
   router.get('/ap/health', async (_req, res) => {
     const health = await externalHealth()
     res.json(health)
+  })
+
+  /** Secret du webhook d'ingestion : généré/renvoyé une seule fois (owner/admin).
+   *  Nécessaire pour configurer le flow Activepieces « Drive → Companion ». */
+  router.post('/webhook-secret', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const crypto = await import('node:crypto')
+    const secret = crypto.randomBytes(24).toString('hex')
+    await dbh.exec(
+      `INSERT INTO settings (organization_id, key, value, updated_at)
+       VALUES ($1::uuid, 'webhook_secret', $2::jsonb, now())
+       ON CONFLICT (organization_id, key) DO UPDATE SET value = excluded.value, updated_at = now()`,
+      [req.user!.organizationId, JSON.stringify(secret)],
+    )
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'integration.webhook_secret_set', targetType: 'integration', targetId: 'activepieces',
+      detail: {},
+    })
+    res.json({ secret })
   })
 
   /** Webhook : Activepieces pousse un fichier (auth Bearer secret requis). */
@@ -48,8 +67,8 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
     // Crée la source et le document, puis exécute le pipeline d'ingestion.
     await dbh.exec(
       `INSERT INTO sources (organization_id, kind, name, status, config)
-       VALUES ('${orgId}', 'local', '${(sourceName ?? 'Activepieces').replace(/'/g, "''")}', 'connected',
-               '${JSON.stringify({ employeeId: employeeId ?? null, viaActivepieces: true }).replace(/'/g, "''")}'::jsonb)`,
+       VALUES ($1, 'local', $2, 'connected', $3::jsonb)`,
+      [orgId, sourceName ?? 'Activepieces', JSON.stringify({ employeeId: employeeId ?? null, viaActivepieces: true })],
     )
     const srcRows = await dbh.query<{ id: string }>(`SELECT id FROM sources ORDER BY created_at DESC LIMIT 1`)
     const sourceId = srcRows[0]?.id
@@ -61,12 +80,11 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
 
     const ext = (fileName.slice(fileName.lastIndexOf('.')) || '.txt').toLowerCase()
     const mime = ext.replace('.', '')
-    const extId = externalId ? `'${externalId.replace(/'/g, "''")}'` : 'NULL'
-    const extProvider = provider ? `'${provider.replace(/'/g, "''")}'` : 'NULL'
     const docRows = await dbh.query<{ id: string }>(
       `INSERT INTO documents (organization_id, source_id, title, mime_type, size_bytes, storage_path, status, external_id, external_provider)
-       VALUES ('${orgId}', '${sourceId}', '${fileName.replace(/'/g, "''")}', '${mime}', ${Buffer.byteLength(content)}, '${filePath.replace(/\\/g, '\\\\')}', 'queued', ${extId}, ${extProvider})
+       VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7, $8)
        RETURNING id`,
+      [orgId, sourceId, fileName, mime, Buffer.byteLength(content), filePath, externalId ?? null, provider ?? null],
     )
     const doc = docRows[0]
 
@@ -96,7 +114,7 @@ export function buildActivepiecesRouter(dbh: DbHandle): Router {
   })
 
   /** Connecter une application : retourne l'URL de connexion Activepieces. */
-  router.post('/connect/:pieceName', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  router.post('/connect/:pieceName', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const pieceName = req.params.pieceName as string
     const apUrl = process.env.ACTIVEPIECES_URL ?? 'http://localhost:5678'
     // Le client SDK Activepieces gère l'OAuth depuis cette URL.

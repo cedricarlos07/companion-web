@@ -138,6 +138,99 @@ async function main() {
   const cHandover = handovers.find((h) => h.employee_id === empId)
   step('C4 — handover avec gaps détectés', Boolean(cHandover), cHandover ? `${cHandover.gaps_total} lacunes` : '')
 
+  /* ---------- SCÉNARIO D — CRÉATION & CONFIG D'AGENT (API réelle) --------- */
+
+  const catalog = (await api('/agents/catalog')).data
+  step(
+    'D1 — catalogue réel (skills workflows + tools policy-gated + scopes org)',
+    (catalog?.skills?.length ?? 0) >= 8 && (catalog?.tools?.length ?? 0) >= 11 &&
+      (catalog?.memoryScopes?.global?.length ?? 0) >= 4,
+    `${catalog?.skills?.length} skills, ${catalog?.tools?.length} tools`,
+  )
+
+  const badAutonomy = await api('/agents', {
+    method: 'POST',
+    body: { name: 'Agent Invalide', goal: 'tester la validation', autonomy: 'dictateur' },
+  })
+  step('D2 — autonomie invalide rejetée (400)', badAutonomy.status === 400, badAutonomy.data?.error ?? '')
+
+  const badSkill = await api('/agents', {
+    method: 'POST',
+    body: {
+      name: 'Agent Skill Fantoche', goal: 'tester la validation', autonomy: 'assistant',
+      allowedSkills: ['teleporter_to_moon'],
+    },
+  })
+  step('D3 — skill sans workflow rejetée (400)', badSkill.status === 400, badSkill.data?.error ?? '')
+
+  const created = await api('/agents', {
+    method: 'POST',
+    body: {
+      name: `Agent Support ${stamp}`,
+      description: 'Agent créé par la batterie — configuration réelle.',
+      goal: 'Assister le support avec les procédures validées',
+      autonomy: 'copilot',
+      memoryScopes: ['company'],
+      allowedSkills: ['research_customer', 'draft_followup'],
+      allowedTools: ['search_memory', 'request_approval'],
+      maxRunTokens: 15000,
+    },
+  })
+  const createdId = created.data?.agent?.id
+  step('D4 — agent créé (201, statut idle)', created.status === 201 && Boolean(createdId) && created.data.agent.status === 'idle', created.data?.agent?.key ?? '')
+
+  const dup = await api('/agents', {
+    method: 'POST',
+    body: { name: `Agent Support ${stamp}`, goal: 'tester unicité de clé', autonomy: 'assistant' },
+  })
+  step('D5 — nom dupliqué → key suffixée, pas de collision', dup.status === 201 && (dup.data?.agent?.key ?? '').endsWith('-2'), dup.data?.agent?.key ?? '')
+
+  // Détail enrichi : runs + usage + triggers de l'agent créé.
+  const detail = (await api(`/agents/${createdId}`)).data
+  step(
+    'D6 — détail enrichi (usage + shape agent)',
+    detail?.agent?.id === createdId && Boolean(detail?.usage) && Array.isArray(detail?.runs) && Array.isArray(detail?.triggers),
+    `runs_total=${detail?.usage?.runs_total ?? '?'}`,
+  )
+
+  const limits = await api(`/agents/${createdId}/limits`, { method: 'POST', body: { maxRunTokens: 25000 } })
+  const afterLimits = (await api(`/agents/${createdId}`)).data?.agent?.max_run_tokens
+  step('D7 — budget par run persisté (/limits)', limits.status === 200 && afterLimits === 25000, `max_run_tokens=${afterLimits}`)
+
+  // Manager (Moussa) ne peut pas créer d'agent — config réservée owner/admin.
+  const ownerCookie = cookie
+  cookie = ''
+  await api('/auth/login', { method: 'POST', body: { email: 'moussa.kone@kamaloka.ci', password: 'companion' } })
+  const memberCreate = await api('/agents', {
+    method: 'POST',
+    body: { name: 'Agent Interdit', goal: 'ne doit jamais exister', autonomy: 'assistant' },
+  })
+  step('D8 — manager créant un agent = 403', memberCreate.status === 403)
+  cookie = ownerCookie
+
+  // Run sans workflowId : le serveur dérive le workflow du skill.
+  const forbidden = await api(`/agents/${createdId}/runs`, {
+    method: 'POST',
+    body: { skill: 'handover_employee', goal: 'ne doit jamais démarrer' },
+  })
+  step('D9 — skill hors allowlist de l\'agent créé = 403', forbidden.status === 403, forbidden.data?.error ?? '')
+
+  const runD = await api(`/agents/${createdId}/runs`, {
+    method: 'POST',
+    body: {
+      skill: 'research_customer', goal: `Recherche client test ${stamp}`,
+      inputData: { client: 'Orange CI', goal: `Recherche client test ${stamp}` },
+    },
+  })
+  step('D10 — run démarré sans workflowId (mapping serveur)', Boolean(runD.data?.run?.id), `run ${String(runD.data?.run?.id ?? '').slice(0, 8)}`)
+
+  const runDStatus = (await api(`/runs/${runD.data?.run?.id}`)).data?.run?.status
+  step('D11 — run persisté avec statut réel', typeof runDStatus === 'string' && runDStatus.length > 0, `status=${runDStatus}`)
+
+  const auditEvents = (await api('/audit?kind=agent')).data?.events ?? []
+  const sawCreated = auditEvents.some((e) => e.action === 'agent.created' && String(e.target_id ?? '') === createdId)
+  step('D12 — création auditée (agent.created)', sawCreated)
+
   /* ---------------------------- SYNTHÈSE --------------------------------- */
 
   const failed = results.filter((r) => !r.ok)

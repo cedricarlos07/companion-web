@@ -1,69 +1,66 @@
-import { useState, type Key } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setTheme, useTheme } from '@/lib/theme'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
-import { ProgressRow } from '@/components/common/progress'
 import { PersonAvatar } from '@/components/common/person-avatar'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { Select, SelectItem } from '@/components/base/select/select'
-import { Tabs, TabList, Tab, TabPanel } from '@/components/base/tabs/tabs'
-import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
+import { HugeIcon } from '@/components/ui/huge-icon'
 import {
   BotIcon,
   CheckmarkCircle02Icon,
-  CloudIcon,
+  CancelCircleIcon,
   Database01Icon,
-  File01Icon,
-  GlobeIcon,
-  KeyIcon,
-  LockIcon,
-  Notification01Icon,
-  Settings01Icon,
-  Shield01Icon,
-  ShieldKeyIcon,
-  SunIcon,
-  ToolsIcon,
+  Building01Icon,
+  WalletIcon,
   UserGroupIcon,
-  UserAdd01Icon,
-  ArchiveIcon,
   CpuIcon,
   ServerStack01Icon,
-  Building01Icon,
+  Shield01Icon,
+  SunIcon,
+  ArchiveIcon,
+  BoltIcon,
 } from '@/lib/icons'
-import { ORG } from '@/data/org'
-import { EMPLOYEES, fullName } from '@/data/employees'
+import { api } from '@/services/api'
+import type { SessionUser } from '@/services/api'
 import { useAppStore } from '@/store/app-store'
 import { cx } from '@/utils/cx'
 
 const SECTIONS = [
-  { id: 'general', label: 'Général', icon: Settings01Icon },
-  { id: 'organization', label: 'Organisation', icon: Building01Icon },
+  { id: 'general', label: 'Général', icon: Building01Icon },
+  { id: 'billing', label: 'Facturation', icon: WalletIcon },
   { id: 'members', label: 'Membres', icon: UserGroupIcon },
   { id: 'ai', label: 'Fournisseurs IA', icon: CpuIcon },
   { id: 'memory', label: 'Mémoire', icon: Database01Icon },
-  { id: 'agents', label: 'Agents', icon: BotIcon },
+  { id: 'agents', label: 'Agents & triggers', icon: BotIcon },
   { id: 'security', label: 'Sécurité', icon: Shield01Icon },
-  { id: 'permissions', label: 'Permissions', icon: ShieldKeyIcon },
-  { id: 'storage', label: 'Stockage', icon: CloudIcon },
   { id: 'backup', label: 'Sauvegardes', icon: ArchiveIcon },
-  { id: 'notifications', label: 'Notifications', icon: Notification01Icon },
   { id: 'appearance', label: 'Apparence', icon: SunIcon },
-  { id: 'advanced', label: 'Avancé', icon: ToolsIcon },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Propriétaire',
+  admin: 'Admin',
+  manager: 'Manager',
+  employee: 'Employé',
+  auditor: 'Auditeur',
+  agent: 'Agent',
+}
+
+const INVITE_ROLES = ['employee', 'manager', 'admin', 'auditor'] as const
+
 export function SettingsPage() {
   const navigate = useNavigate()
-  const { pushToast } = useAppStore()
   const [section, setSection] = useState<SectionId>('general')
   const themeChoice = useTheme()
 
   return (
     <div>
-      <PageHeader title="Paramètres" subtitle={`Instance ${ORG.instance} · ${ORG.workspace}`} />
+      <PageHeader title="Paramètres" subtitle="Configuration réelle de l'instance — chaque action est persistée et auditée." />
 
       <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
         {/* Left nav */}
@@ -73,7 +70,7 @@ export function SettingsPage() {
               <li key={s.id}>
                 <button
                   type="button"
-                  onClick={() => setSection(s.id)}
+                  onClick={() => (s.id === 'billing' ? navigate('/billing') : setSection(s.id))}
                   aria-current={section === s.id ? 'true' : undefined}
                   className={cx(
                     'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-body-2-medium transition-colors',
@@ -92,317 +89,28 @@ export function SettingsPage() {
 
         {/* Section content */}
         <div className="min-w-0 space-y-4">
-          {section === 'general' && (
-            <Tabs defaultSelectedKey="instance">
-              <TabList aria-label="Paramètres généraux">
-                <Tab id="instance">Instance</Tab>
-                <Tab id="profile">Profil</Tab>
-              </TabList>
-              <TabPanel id="instance" className="pt-4">
-                <SettingsCard title="Général">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Input label="Nom de l'espace" defaultValue={ORG.workspace} />
-                    <Input label="Instance" defaultValue={ORG.instance} />
-                    <Selectled label="Langue de l'interface" defaultValue="Français" items={['Français', 'English']} />
-                    <Selectled label="Fuseau horaire" defaultValue="Africa/Abidjan (GMT)" items={['Africa/Abidjan (GMT)', 'Europe/Paris (UTC+1)']} />
-                  </div>
-                  <div className="mt-4">
-                    <Button onClick={() => pushToast('Modification enregistrée.')}>Enregistrer</Button>
-                  </div>
-                </SettingsCard>
-              </TabPanel>
-              <TabPanel id="profile" className="pt-4">
-                <SettingsCard title="Votre profil">
-                  <div className="flex items-center gap-4">
-                    <PersonAvatar name={ORG.currentUser} size="lg" />
-                    <div>
-                      <p className="text-headline-medium text-text-primary">{ORG.currentUser}</p>
-                      <p className="text-caption-1-medium text-text-secondary">{ORG.currentUserRole}</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <Input label="Nom complet" defaultValue={ORG.currentUser} />
-                    <Input label="Email" defaultValue="ange.niamke@kamaloka.ci" />
-                  </div>
-                  <div className="mt-4">
-                    <Button onClick={() => pushToast('Profil mis à jour.')}>Enregistrer</Button>
-                  </div>
-                </SettingsCard>
-              </TabPanel>
-            </Tabs>
-          )}
-
-          {section === 'organization' && (
-            <SettingsCard title="Organisation">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input label="Entreprise" defaultValue={ORG.workspace} />
-                <Input label="Secteur" defaultValue={ORG.sector} />
-                <Input label="Pays" defaultValue={ORG.country} />
-                <Input label="Nombre d'employés" defaultValue={String(ORG.employees)} />
-              </div>
-              <p className="mt-3 text-caption-1-medium text-text-tertiary">
-                Ces informations contextualisent la mémoire (terminologie, conformité locale).
-              </p>
-              <div className="mt-4">
-                <Button onClick={() => pushToast('Modification enregistrée.')}>Enregistrer</Button>
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'members' && (
-            <SettingsCard title="Membres" bodyClassName="p-0">
-              <div className="grid grid-cols-[1fr_140px_130px_120px_100px_90px] items-center gap-3 border-b border-border-table bg-background-secondary-default px-4 py-2.5 text-caption-1-semibold text-text-secondary max-lg:hidden">
-                <span>Nom</span>
-                <span>Rôle</span>
-                <span>Département</span>
-                <span>Accès</span>
-                <span>Actif</span>
-                <span>Actions</span>
-              </div>
-              <ul>
-                {EMPLOYEES.slice(0, 6).map((e) => (
-                  <li
-                    key={e.id}
-                    className="grid grid-cols-[1fr_140px_130px_120px_100px_90px] items-center gap-3 border-b border-separator-border px-4 py-3 last:border-b-0 max-lg:grid-cols-[1fr_auto]"
-                  >
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <PersonAvatar name={fullName(e)} size="xs" />
-                      <span className="min-w-0 truncate text-body-2-medium text-text-primary">{fullName(e)}</span>
-                    </span>
-                    <span className="truncate text-caption-1-medium text-text-secondary max-lg:hidden">{e.roleTitle}</span>
-                    <span className="text-caption-1-medium text-text-secondary max-lg:hidden">{e.department}</span>
-                    <span className="text-caption-1-medium text-text-secondary max-lg:hidden">
-                      {e.companionAccess === 'full' ? 'Complet' : e.companionAccess === 'limited' ? 'Limité' : 'Aucun'}
-                    </span>
-                    <span className="text-caption-1-medium text-text-tertiary max-lg:hidden">{e.lastActive}</span>
-                    <span className="flex gap-1.5 max-lg:hidden">
-                      <Button variant="ghost" size="xs" onClick={() => pushToast('Permissions ouvertes (démo).', 'info')}>
-                        Permissions
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => {
-                          pushToast(`Transfert préparé pour ${fullName(e)}.`)
-                          navigate(`/handovers/new/${e.id}`)
-                        }}
-                      >
-                        Départ
-                      </Button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex items-center justify-between px-4 py-3">
-                <p className="text-caption-1-medium text-text-tertiary">
-                  {ORG.employees} membres au total — 42 comptes actifs.
-                </p>
-                <Button size="xs" leadingIcon={adaptIcon(UserAdd01Icon, 16)} onClick={() => pushToast('Invitation envoyée (démo).')}>
-                  Inviter
-                </Button>
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'ai' && <AiProvidersCard />}
-
-          {section === 'memory' && (
-            <SettingsCard title="Mémoire">
-              <div className="space-y-1">
-                <SettingRow
-                  label="Seuil de confiance des candidates"
-                  detail="En dessous de ce score, une mémoire reste candidate jusqu'à validation humaine."
-                  control={
-                    <SelectledSmall defaultValue="70 %" items={['50 %', '60 %', '70 %', '85 %']} ariaLabel="Seuil de confiance" />
-                  }
-                />
-                <SettingRow
-                  label="Vérification automatique"
-                  detail="Confirmer les mémoires lorsqu'elles sont corroborées par plusieurs sources."
-                  control={<SwitchCardInline defaultOn />}
-                />
-                <SettingRow
-                  label="Détection des doublons"
-                  detail="Fusionner les connaissances identiques détectées dans plusieurs sources."
-                  control={<SwitchCardInline defaultOn />}
-                />
-                <SettingRow
-                  label="Détection des contradictions"
-                  detail="Signaler les versions contradictoires d'une même connaissance."
-                  control={<SwitchCardInline defaultOn />}
-                />
-                <SettingRow
-                  label="Vieillissement des mémoires"
-                  detail="Signaler les procédures non mises à jour depuis plus de 12 mois."
-                  control={<SwitchCardInline defaultOn />}
-                />
-                <SettingRow
-                  label="Archivage des connaissances obsolètes"
-                  detail="Conserver les anciennes versions pour audit, hors des réponses."
-                  control={<SwitchCardInline defaultOn />}
-                />
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'agents' && (
-            <SettingsCard title="Agents">
-              <div className="space-y-1">
-                <SettingRow
-                  label="Budget d'exécution par agent"
-                  detail="Nombre maximal d'actions par jour et par agent."
-                  control={<SelectledSmall defaultValue="200 / jour" items={['50 / jour', '100 / jour', '200 / jour']} ariaLabel="Budget d'exécution" />}
-                />
-                <SettingRow
-                  label="Validation humaine obligatoire pour les emails"
-                  detail="Aucun agent ne peut envoyer un email sans approbation."
-                  control={<SwitchCardInline defaultOn />}
-                />
-                <SettingRow
-                  label="Journalisation détaillée"
-                  detail="Enregistrer chaque étape de raisonnement et d'outil utilisé."
-                  control={<SwitchCardInline defaultOn />}
-                />
-              </div>
-              <div className="mt-4">
-                <Button variant="secondary" size="small" onClick={() => navigate('/agents')}>
-                  Gérer les agents
-                </Button>
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'security' && (
-            <SettingsCard title="Sécurité">
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  { icon: ServerStack01Icon, label: 'Hébergement', value: 'Auto-hébergé — brain.kamaloka.local', ok: true },
-                  { icon: GlobeIcon, label: 'Résidence des données', value: "Côte d'Ivoire — région Abidjan", ok: true },
-                  { icon: LockIcon, label: 'Chiffrement de la base', value: 'AES-256 au repos', ok: true },
-                  { icon: UserGroupIcon, label: 'Utilisateurs connectés', value: '12 actuellement', ok: true },
-                  { icon: Shield01Icon, label: 'Sessions actives', value: '18 sessions', ok: true },
-                  { icon: ShieldKeyIcon, label: 'MFA', value: 'Obligatoire pour les administrateurs', ok: true },
-                  { icon: KeyIcon, label: 'SSO', value: 'SAML — configuré', ok: true },
-                  { icon: File01Icon, label: "Rétention de l'audit", value: '24 mois', ok: true },
-                  { icon: BotIcon, label: 'Permissions des agents', value: 'Par agent, validées par un admin', ok: true },
-                  { icon: GlobeIcon, label: 'Accès réseau externe', value: 'Désactivé — VPN uniquement', ok: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-start gap-3 rounded-xl border border-border-button-default p-3.5">
-                    <HugeIcon icon={item.icon} size="md" className="mt-0.5 shrink-0 text-foreground-icon-tertiary" />
-                    <div className="min-w-0">
-                      <p className="text-caption-1-medium text-text-tertiary">{item.label}</p>
-                      <p className="text-body-2-medium text-text-primary">{item.value}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'permissions' && (
-            <SettingsCard title="Permissions">
-              <div className="space-y-1">
-                <SettingRow
-                  label="Qui peut valider les mémoires"
-                  detail="Managers et administrateurs uniquement."
-                  control={<SelectledSmall defaultValue="Managers +" items={['Admins', 'Managers +', 'Tous']} ariaLabel="Validation des mémoires" />}
-                />
-                <SettingRow
-                  label="Qui peut créer des agents"
-                  detail="Réservé aux administrateurs."
-                  control={<SelectledSmall defaultValue="Admins" items={['Admins', 'Managers +']} ariaLabel="Création d'agents" />}
-                />
-                <SettingRow
-                  label="Qui peut voir le Knowledge Risk"
-                  detail="Direction et managers."
-                  control={<SelectledSmall defaultValue="Direction +" items={['Admins', 'Direction +', 'Tous']} ariaLabel="Visibilité du risque" />}
-                />
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'storage' && (
-            <SettingsCard title="Stockage">
-              <div className="space-y-3">
-                <ProgressRow label="Base de connaissances" value={62} />
-                <ProgressRow label="Documents sources" value={44} />
-                <ProgressRow label="Index de recherche" value={28} />
-                <ProgressRow label="Sauvegardes" value={71} />
-              </div>
-              <p className="mt-3 text-caption-1-medium text-text-tertiary">
-                Volume total : 1,2 To sur 2 To alloués — disque local chiffré.
-              </p>
-            </SettingsCard>
-          )}
-
-          {section === 'backup' && (
-            <SettingsCard title="Sauvegardes">
-              <div className="space-y-1">
-                <SettingRow
-                  label="Sauvegarde automatique"
-                  detail="Quotidienne à 02:00, conservée 30 jours."
-                  control={<SwitchCardInline defaultOn />}
-                />
-                <SettingRow
-                  label="Export chiffré hors site"
-                  detail="Copie chiffrée vers un stockage externe."
-                  control={<SwitchCardInline />}
-                />
-              </div>
-              <div className="mt-4 flex gap-2">
-                <Button variant="secondary" size="small" onClick={() => pushToast('Sauvegarde lancée (démo).')}>
-                  Sauvegarder maintenant
-                </Button>
-                <Button variant="ghost" size="small" onClick={() => pushToast('Dernière sauvegarde : cette nuit, 02:00 — succès.', 'info')}>
-                  Dernière sauvegarde
-                </Button>
-              </div>
-            </SettingsCard>
-          )}
-
-          {section === 'notifications' && (
-            <SettingsCard title="Notifications">
-              <div className="space-y-1">
-                <SettingRow label="Conflits de connaissances" detail="Email + centre de notifications." control={<SwitchCardInline defaultOn />} />
-                <SettingRow label="Approbations en attente" detail="Notification immédiate." control={<SwitchCardInline defaultOn />} />
-                <SettingRow label="Échecs de synchronisation" detail="Email à l'administrateur." control={<SwitchCardInline defaultOn />} />
-                <SettingRow label="Résumé hebdomadaire" detail="Chaque lundi : activité et risques." control={<SwitchCardInline />} />
-              </div>
-            </SettingsCard>
-          )}
-
+          {section === 'general' && <GeneralSection />}
+          {section === 'members' && <MembersSection />}
+          {section === 'ai' && <AiSection />}
+          {section === 'memory' && <MemorySection />}
+          {section === 'agents' && <AgentsSection />}
+          {section === 'security' && <SecuritySection />}
+          {section === 'backup' && <BackupSection />}
           {section === 'appearance' && (
-            <SettingsCard title="Apparence">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Selectled
-                  label="Thème"
-                  items={['Clair', 'Sombre', 'Système']}
-                  selectedKey={themeChoice === 'light' ? 'Clair' : themeChoice === 'dark' ? 'Sombre' : 'Système'}
-                  onSelectionChange={(k) =>
-                    setTheme(k === 'Clair' ? 'light' : k === 'Sombre' ? 'dark' : 'system')
-                  }
-                />
-                <Selectled label="Densité" defaultValue="Confortable" items={['Confortable', 'Compact']} />
-              </div>
+            <Card title="Apparence">
+              <Selectled
+                label="Thème"
+                items={['Clair', 'Sombre', 'Système']}
+                selectedKey={themeChoice === 'light' ? 'Clair' : themeChoice === 'dark' ? 'Sombre' : 'Système'}
+                onSelectionChange={(k) =>
+                  setTheme(k === 'Clair' ? 'light' : k === 'Sombre' ? 'dark' : 'system')
+                }
+              />
               <p className="mt-3 text-caption-1-medium text-text-tertiary">
                 Clair, sombre ou synchronisé avec votre système — le vert Companion reste l'accent
                 dans les deux modes.
               </p>
-            </SettingsCard>
-          )}
-
-          {section === 'advanced' && (
-            <SettingsCard title="Avancé">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input label="Modèle d'embedding" defaultValue="nomic-embed-text (local)" />
-                <Input label="Dimension d'embedding" defaultValue="768" />
-                <Input label="URL de l'API d'inférence" defaultValue="http://localhost:11434" />
-                <Input label="Seuil de similarité" defaultValue="0.82" />
-              </div>
-              <p className="mt-3 text-caption-1-medium text-text-tertiary">
-                Réglages techniques — modifiez-les seulement avec l'appui de l'équipe informatique.
-              </p>
-            </SettingsCard>
+            </Card>
           )}
         </div>
       </div>
@@ -410,160 +118,548 @@ export function SettingsPage() {
   )
 }
 
-function SettingsCard({
-  title,
-  children,
-  bodyClassName,
-}: {
-  title: string
-  children: React.ReactNode
-  bodyClassName?: string
-}) {
+/* ------------------------------ Général ----------------------------------- */
+
+function GeneralSection() {
+  const { pushToast } = useAppStore()
+  const [me, setMe] = useState<SessionUser | null>(null)
+  const [name, setName] = useState('')
+  const [sector, setSector] = useState('')
+  const [country, setCountry] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.me().then((res) => {
+      if (!res) {
+        setError('Session introuvable — rechargez la page.')
+        return
+      }
+      setMe(res.user)
+      setName(res.user.org_name ?? '')
+      setSector(res.user.sector ?? '')
+      setCountry(res.user.country ?? '')
+    })
+  }, [])
+
+  async function save() {
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    const res = await api.updateOrganization({ name: name.trim(), sector, country })
+    setSaving(false)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    pushToast('Organisation mise à jour.', 'success')
+    setMe((m) => (m ? { ...m, org_name: res.data.organization.name } : m))
+  }
+
   return (
-    <Card title={title} bodyClassName={bodyClassName}>
-      {children}
+    <>
+      {error && (
+        <div role="alert" className="rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+      <Card title="Organisation">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Nom de l'entreprise" value={name} onChange={setName} />
+          <Input label="Instance" value={me?.instance_url ?? '—'} onChange={() => {}} />
+          <Input label="Secteur" value={sector} onChange={setSector} placeholder="ex. Services B2B" />
+          <Input label="Pays" value={country} onChange={setCountry} placeholder="ex. Côte d'Ivoire" />
+        </div>
+        <p className="mt-3 text-caption-1-medium text-text-tertiary">
+          Ces informations contextualisent la mémoire (terminologie, conformité locale). L'instance est
+          fixée au provisionnement.
+        </p>
+        <div className="mt-4">
+          <Button onClick={() => void save()} disabled={saving || name.trim().length < 2}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </div>
+      </Card>
+      <Card title="Votre profil">
+        <div className="flex items-center gap-4">
+          <PersonAvatar name={me?.name ?? '—'} size="lg" />
+          <div>
+            <p className="text-headline-medium text-text-primary">{me?.name ?? '…'}</p>
+            <p className="text-caption-1-medium text-text-secondary">
+              {me ? ROLE_LABELS[me.app_role] ?? me.app_role : ''} · {me?.email ?? ''}
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 text-caption-1-medium text-text-tertiary">
+          Le compte et son rôle sont gérés par l'organisation — contactez un administrateur pour toute
+          modification.
+        </p>
+      </Card>
+    </>
+  )
+}
+
+/* ------------------------------- Membres ---------------------------------- */
+
+function MembersSection() {
+  const { pushToast } = useAppStore()
+  const [users, setUsers] = useState<NonNullable<Awaited<ReturnType<typeof api.users>>>['users'] | null>(null)
+  const [invitations, setInvitations] = useState<NonNullable<Awaited<ReturnType<typeof api.invitations>>>['invitations']>([])
+  const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<string>('employee')
+  const [inviting, setInviting] = useState(false)
+
+  const load = useCallback(async () => {
+    setError(null)
+    const [u, i] = await Promise.all([api.users(), api.invitations()])
+    if (u === null) {
+      setError(u === null && i === null ? 'Backend indisponible.' : 'Liste des comptes réservée aux administrateurs.')
+    }
+    if (u) setUsers(u.users)
+    if (i) setInvitations(i.invitations)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function invite() {
+    if (inviting) return
+    setInviting(true)
+    const res = await api.createInvitation(email.trim(), role)
+    setInviting(false)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    pushToast(
+      res.data.devToken
+        ? `Invitation créée — lien de dev : /invitations/accept?token=${res.data.devToken.slice(0, 12)}…`
+        : 'Invitation créée — email envoyé.',
+      'success',
+    )
+    setEmail('')
+    void load()
+  }
+
+  return (
+    <>
+      {error && (
+        <div role="alert" className="rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+      <Card title="Comptes" bodyClassName="p-0">
+        <ul>
+          {(users ?? []).map((u) => (
+            <li key={u.id} className="flex flex-wrap items-center gap-3 border-b border-separator-border px-4 py-3 last:border-b-0">
+              <PersonAvatar name={u.name} size="xs" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-body-2-medium text-text-primary">{u.name}</p>
+                <p className="truncate text-caption-1-medium text-text-tertiary">{u.email}</p>
+              </div>
+              <span className="rounded-md bg-background-secondary-default px-1.5 py-0.5 text-caption-1-medium text-text-secondary">
+                {ROLE_LABELS[u.app_role] ?? u.app_role}
+              </span>
+              <span className={`text-caption-1-medium ${u.active ? 'text-status-lime-text' : 'text-text-tertiary'}`}>
+                {u.active ? 'Actif' : 'Désactivé'}
+              </span>
+            </li>
+          ))}
+          {users !== null && users.length === 0 && (
+            <li className="px-4 py-3 text-body-2-medium text-text-secondary">Aucun compte.</li>
+          )}
+        </ul>
+      </Card>
+      <Card title="Invitations">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-56 flex-1">
+            <Input label="Email à inviter" value={email} onChange={setEmail} placeholder="prenom.nom@entreprise.ci" />
+          </div>
+          <Selectled
+            label="Rôle"
+            items={INVITE_ROLES.map((r) => ROLE_LABELS[r])}
+            selectedKey={ROLE_LABELS[role]}
+            onSelectionChange={(k) => setRole(INVITE_ROLES.find((r) => ROLE_LABELS[r] === k) ?? 'employee')}
+          />
+          <Button onClick={() => void invite()} disabled={inviting || !email.includes('@')}>
+            {inviting ? 'Envoi…' : 'Inviter'}
+          </Button>
+        </div>
+        <ul className="mt-4 space-y-2">
+          {invitations.map((i) => (
+            <li key={i.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-body-2-medium text-text-primary">{i.email}</p>
+                <p className="text-caption-1-medium text-text-tertiary">
+                  {ROLE_LABELS[i.role] ?? i.role} · par {i.invited_by_name ?? '—'} · expire {i.expires_at.slice(0, 10)}
+                </p>
+              </div>
+              <span className={cx('rounded-md px-1.5 py-0.5 text-caption-1-medium',
+                i.status === 'pending' ? 'bg-status-yellow-background text-status-yellow-text'
+                  : i.status === 'accepted' ? 'bg-status-lime-background text-status-lime-text'
+                    : 'bg-background-tertiary-default text-text-tertiary')}>
+                {i.status === 'pending' ? 'En attente' : i.status === 'accepted' ? 'Acceptée' : i.status}
+              </span>
+            </li>
+          ))}
+          {invitations.length === 0 && (
+            <li className="text-body-2-medium text-text-secondary">Aucune invitation en cours.</li>
+          )}
+        </ul>
+      </Card>
+    </>
+  )
+}
+
+/* ---------------------------- Fournisseurs IA ----------------------------- */
+
+type AiHealth = NonNullable<Awaited<ReturnType<typeof api.systemHealth>>>['ai']
+
+function AiSection() {
+  const { pushToast } = useAppStore()
+  const [settings, setSettings] = useState<{ chatModel: string; embedModel: string; embedDim: number } | null>(null)
+  const [health, setHealth] = useState<AiHealth | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const loadHealth = useCallback(async () => {
+    const res = await api.systemHealth()
+    if (res === null) {
+      setError('État du moteur indisponible.')
+      return
+    }
+    setHealth(res.ai)
+    setError(null)
+  }, [])
+
+  useEffect(() => {
+    api.aiSettings().then((res) => {
+      if (res) setSettings(res.settings)
+      else setError('Configuration IA indisponible.')
+    })
+    void loadHealth()
+  }, [loadHealth])
+
+  async function save() {
+    if (saving || !settings) return
+    setSaving(true)
+    const res = await api.setAiSettings({ chatModel: settings.chatModel, embedModel: settings.embedModel })
+    setSaving(false)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    setSettings(res.data.settings)
+    pushToast('Modèles épinglés — enregistrés.', 'success')
+    void loadHealth()
+  }
+
+  return (
+    <>
+      {error && (
+        <div role="alert" className="rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+      <Card title="Moteur d'inférence — Ollama local">
+        <p className="mb-3 text-body-2-regular text-text-secondary">
+          Les modèles sont épinglés : aucun basculement silencieux. Un modèle absent de l'instance est
+          signalé comme dégradation, jamais remplacé.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Modèle de chat"
+            value={settings?.chatModel ?? ''}
+            onChange={(v) => setSettings((s) => (s ? { ...s, chatModel: v } : s))}
+          />
+          <Input
+            label="Modèle d'embedding"
+            value={settings?.embedModel ?? ''}
+            onChange={(v) => setSettings((s) => (s ? { ...s, embedModel: v } : s))}
+          />
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Button onClick={() => void save()} disabled={saving || !settings}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+          <Button variant="secondary" onClick={() => void loadHealth()}>
+            Vérifier l'instance
+          </Button>
+        </div>
+      </Card>
+      {health && (
+        <Card title="État de l'instance">
+          <div className="flex items-center gap-2">
+            <HugeIcon icon={health.ok ? CheckmarkCircle02Icon : CancelCircleIcon} size="sm" className={health.ok ? 'text-status-lime-text' : 'text-text-error-primary'} />
+            <p className="text-body-2-medium text-text-primary">
+              {health.ok
+                ? `OK — ${health.chatModel} + ${health.embedModel} présents (${health.availableModels.length} modèles disponibles).`
+                : 'Dégradation détectée :'}
+            </p>
+          </div>
+          {!health.ok && (
+            <ul className="mt-2 space-y-1">
+              {health.issues.map((issue) => (
+                <li key={issue} className="text-caption-1-medium text-text-error-primary">· {issue}</li>
+              ))}
+            </ul>
+          )}
+          {settings && (
+            <p className="mt-2 text-caption-1-medium text-text-tertiary">
+              Dimension d'embedding : {settings.embedDim} · provider : {health.provider}
+            </p>
+          )}
+        </Card>
+      )}
+    </>
+  )
+}
+
+/* -------------------------------- Mémoire --------------------------------- */
+
+function MemorySection() {
+  const [health, setHealth] = useState<Awaited<ReturnType<typeof api.systemHealth>> | null>(null)
+
+  useEffect(() => {
+    api.systemHealth().then(setHealth)
+  }, [])
+
+  if (health === null) {
+    return <Card><p className="text-body-2-medium text-text-tertiary">Chargement de l'état mémoire…</p></Card>
+  }
+
+  const providerOk = health.provider?.ok !== false
+  return (
+    <Card title="Moteur de mémoire">
+      <div className="space-y-2.5">
+        <p className="flex items-center gap-2 text-body-2-medium text-text-primary">
+          <HugeIcon icon={providerOk ? CheckmarkCircle02Icon : CancelCircleIcon} size="sm" className={providerOk ? 'text-status-lime-text' : 'text-text-error-primary'} />
+          Moteur : {health.engine} · provider : {String(health.provider?.provider ?? health.provider?.name ?? 'mem0')}
+        </p>
+        {!health.ai.ok && (
+          <p className="text-caption-1-medium text-text-error-primary">
+            Embeddings dégradés — {health.ai.issues[0] ?? 'voir Fournisseurs IA'}
+          </p>
+        )}
+        <p className="text-caption-1-medium text-text-tertiary">
+          La détection de contradictions, la fusion des doublons et le vieillissement des mémoires sont
+          des comportements du moteur — toujours actifs, pas des options. Consultez Company Brain pour
+          les mémoires signalées.
+        </p>
+      </div>
     </Card>
   )
 }
 
-function SettingRow({
-  label,
-  detail,
-  control,
-}: {
-  label: string
-  detail: string
-  control: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-separator-border py-3.5 last:border-b-0">
-      <div className="min-w-0 flex-1">
-        <p className="text-body-2-medium text-text-primary">{label}</p>
-        <p className="text-caption-1-regular text-text-tertiary">{detail}</p>
-      </div>
-      <div className="shrink-0">{control}</div>
-    </div>
-  )
-}
+/* ------------------------------ Agents & triggers ------------------------- */
 
-function SwitchCardInline({ defaultOn = false }: { defaultOn?: boolean }) {
+function AgentsSection() {
+  const navigate = useNavigate()
   const { pushToast } = useAppStore()
-  return (
-    <SimpleSwitch
-      defaultOn={defaultOn}
-      onChange={(v) => pushToast(v ? 'Activé.' : 'Désactivé.', v ? 'success' : 'info')}
-    />
-  )
-}
+  const [triggers, setTriggers] = useState<NonNullable<Awaited<ReturnType<typeof api.triggers>>>['triggers'] | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-function SimpleSwitch({ defaultOn, onChange }: { defaultOn: boolean; onChange: (v: boolean) => void }) {
-  const [on, setOn] = useState(defaultOn)
+  const load = useCallback(async () => {
+    const res = await api.triggers()
+    if (res === null) {
+      setError('Déclencheurs indisponibles.')
+      return
+    }
+    setError(null)
+    setTriggers(res.triggers)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function toggle(id: string) {
+    const res = await api.toggleTrigger(id)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    setTriggers((list) => (list ? list.map((t) => (t.id === id ? { ...t, enabled: !t.enabled } : t)) : list))
+  }
+
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => {
-        setOn(!on)
-        onChange(!on)
-      }}
-      className={cx(
-        'relative h-5.5 w-10 rounded-full transition-colors',
-        on ? 'bg-accent-500' : 'bg-background-tertiary-default',
+    <>
+      {error && (
+        <div role="alert" className="rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
       )}
-    >
-      <span
-        className={cx(
-          'absolute top-0.5 size-4.5 rounded-full bg-white shadow-xs transition-[left]',
-          on ? 'left-[calc(100%-1.25rem)]' : 'left-0.5',
-        )}
-      />
-    </button>
+      <Card title="Déclencheurs automatiques">
+        <p className="mb-3 text-body-2-regular text-text-secondary">
+          Chaque déclencheur lance le workflow de l'agent concerné, dans la limite de son quota horaire.
+        </p>
+        <ul className="space-y-2">
+          {(triggers ?? []).map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5">
+              <HugeIcon icon={BoltIcon} size="sm" className={t.enabled ? 'text-accent-600' : 'text-foreground-icon-tertiary'} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-body-2-medium text-text-primary">{t.event_type}</p>
+                <p className="text-caption-1-medium text-text-tertiary">
+                  {t.skill} · agent {t.agent_key} · quota {t.rate_limit_per_hour}/h
+                </p>
+              </div>
+              <Button variant="secondary" size="xs" onClick={() => void toggle(t.id)}>
+                {t.enabled ? 'Désactiver' : 'Activer'}
+              </Button>
+            </li>
+          ))}
+          {triggers !== null && triggers.length === 0 && (
+            <li className="text-body-2-medium text-text-secondary">Aucun déclencheur.</li>
+          )}
+        </ul>
+      </Card>
+      <Card title="Budgets & garde-fous">
+        <p className="text-body-2-regular text-text-secondary">
+          Les budgets (tokens par run, plafond quotidien) sont configurés agent par agent, et la
+          validation humaine des envois est imposée par la policy layer — elle ne se désactive pas.
+        </p>
+        <div className="mt-4">
+          <Button variant="secondary" size="small" onClick={() => navigate('/agents')}>
+            Gérer les agents
+          </Button>
+        </div>
+      </Card>
+    </>
   )
 }
 
-function AiProvidersCard() {
-  const { pushToast } = useAppStore()
-  const [selected, setSelected] = useState('ollama')
-  const providers = [
-    { id: 'ollama', name: 'Ollama', detail: 'Local — llama3.2, nomic-embed-text', icon: ServerStack01Icon, connected: true },
-    { id: 'openai', name: 'OpenAI', detail: 'Non configuré', icon: CpuIcon, connected: false },
-    { id: 'anthropic', name: 'Anthropic', detail: 'Non configuré', icon: CloudIcon, connected: false },
-    { id: 'gemini', name: 'Gemini', detail: 'Non configuré', icon: CloudIcon, connected: false },
-    { id: 'compatible', name: 'OpenAI Compatible', detail: 'Non configuré', icon: ToolsIcon, connected: false },
-  ]
+/* -------------------------------- Sécurité -------------------------------- */
+
+function SecuritySection() {
+  const [check, setCheck] = useState<Awaited<ReturnType<typeof api.securityCheck>> | null>(null)
+
+  useEffect(() => {
+    api.securityCheck().then(setCheck)
+  }, [])
+
+  if (check === null) {
+    return <Card><p className="text-body-2-medium text-text-tertiary">Vérification de sécurité réservée aux administrateurs…</p></Card>
+  }
 
   return (
-    <SettingsCard title="Fournisseurs d'intelligence">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {providers.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => setSelected(p.id)}
-            aria-pressed={selected === p.id}
-            className={cx(
-              'flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors',
-              selected === p.id
-                ? 'border-accent-500 bg-accent-50/50 ring-1 ring-accent-500'
-                : 'border-border-button-default hover:bg-background-primary-hover',
-            )}
-          >
-            <HugeIcon icon={p.icon} size="md" className="mt-0.5 shrink-0 text-foreground-icon-secondary" />
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2">
-                <span className="text-body-2-medium font-medium text-text-primary">{p.name}</span>
-                {p.connected ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-status-lime-background px-1.5 py-0.5 text-caption-2-medium text-status-lime-text">
-                    <HugeIcon icon={CheckmarkCircle02Icon} size="xs" />
-                    Connecté
-                  </span>
-                ) : (
-                  <span className="rounded-md bg-background-tertiary-default px-1.5 py-0.5 text-caption-2-medium text-text-tertiary">
-                    Non configuré
-                  </span>
-                )}
-              </span>
-              <span className="mt-0.5 block text-caption-1-medium text-text-tertiary">{p.detail}</span>
-            </span>
-          </button>
-        ))}
+    <Card title="Vérification de l'instance">
+      <div className="flex items-center gap-2">
+        <HugeIcon icon={check.ok ? CheckmarkCircle02Icon : CancelCircleIcon} size="sm" className={check.ok ? 'text-status-lime-text' : 'text-text-error-primary'} />
+        <p className="text-body-2-medium text-text-primary">
+          {check.ok ? 'Aucun problème détecté.' : `${check.issues.length} problème(s) :`}
+        </p>
       </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Input label="Clé API" type="password" defaultValue="sk-••••••••••••••••••••" />
-        <Input label="URL de base" defaultValue="http://localhost:11434/v1" />
-        <Input label="Modèle" defaultValue="llama3.2" />
-        <Input label="Modèle d'embedding" defaultValue="nomic-embed-text" />
+      {!check.ok && (
+        <ul className="mt-2 space-y-1">
+          {check.issues.map((issue) => (
+            <li key={issue} className="text-caption-1-medium text-text-error-primary">· {issue}</li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-caption-1-medium text-text-tertiary">Dernière vérification : {new Date(check.checkedAt).toLocaleString('fr-FR')}</p>
+      <div className="mt-4 rounded-xl bg-background-secondary-default p-3.5">
+        <p className="text-caption-1-semibold text-text-secondary">Permissions appliquées (server-side)</p>
+        <ul className="mt-1.5 space-y-1 text-caption-1-medium text-text-tertiary">
+          <li>· Création d'agents & édition IA : propriétaire / admin</li>
+          <li>· Statuts, runs, approbations, invitations : propriétaire / admin / manager</li>
+          <li>· Restauration d'une sauvegarde : propriétaire uniquement</li>
+          <li>· Les agents ne peuvent jamais élargir leurs propres permissions</li>
+        </ul>
       </div>
-      <p className="mt-2 flex items-center gap-1.5 text-caption-1-medium text-text-tertiary">
-        <HugeIcon icon={LockIcon} size="xs" />
-        Les secrets sont chiffrés et ne quittent jamais votre instance.
-      </p>
-      <div className="mt-4 flex gap-2">
-        <Button onClick={() => pushToast('Connexion réussie — modèle llama3.2 répond.', 'success')}>
-          Tester la connexion
-        </Button>
-        <Button variant="secondary" onClick={() => pushToast('Configuration enregistrée.')}>
-          Enregistrer
-        </Button>
-      </div>
-    </SettingsCard>
+    </Card>
   )
 }
+
+/* ------------------------------ Sauvegardes ------------------------------- */
+
+function BackupSection() {
+  const { pushToast } = useAppStore()
+  const [backups, setBackups] = useState<NonNullable<Awaited<ReturnType<typeof api.backups>>>['backups'] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+
+  const load = useCallback(async () => {
+    const res = await api.backups()
+    if (res === null) {
+      setError('Sauvegardes réservées aux administrateurs ou backend indisponible.')
+      return
+    }
+    setError(null)
+    setBackups(res.backups)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function run() {
+    if (running) return
+    setRunning(true)
+    const res = await api.createBackup()
+    setRunning(false)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    pushToast(`Sauvegarde créée : ${res.data.backupDir}`, 'success')
+    void load()
+  }
+
+  return (
+    <>
+      {error && (
+        <div role="alert" className="rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
+      <Card title="Sauvegardes">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-body-2-regular text-text-secondary">
+            Sauvegarde complète (base + fichiers) — chaque création est auditée.
+          </p>
+          <Button onClick={() => void run()} disabled={running}>
+            {running ? 'Sauvegarde…' : 'Sauvegarder maintenant'}
+          </Button>
+        </div>
+        <ul className="mt-4 space-y-2">
+          {(backups ?? []).map((b) => {
+            const tables = b.manifest ? Object.values(b.manifest.tables).reduce((s, n) => s + n, 0) : 0
+            return (
+              <li key={b.dir} className="flex flex-wrap items-center gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5">
+                <HugeIcon icon={ServerStack01Icon} size="sm" className="text-foreground-icon-tertiary" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-body-2-medium text-text-primary">{b.dir}</p>
+                  <p className="text-caption-1-medium text-text-tertiary">
+                    {b.manifest
+                      ? `${new Date(b.manifest.createdAt).toLocaleString('fr-FR')} · ${tables.toLocaleString('fr-FR')} lignes · ${b.manifest.uploadsCount} fichiers`
+                      : 'manifeste illisible'}
+                  </p>
+                </div>
+              </li>
+            )
+          })}
+          {backups !== null && backups.length === 0 && (
+            <li className="text-body-2-medium text-text-secondary">Aucune sauvegarde — lancez la première.</li>
+          )}
+        </ul>
+      </Card>
+    </>
+  )
+}
+
+/* --------------------------------- Communs -------------------------------- */
 
 function Selectled({
   label,
-  defaultValue,
   items,
   selectedKey,
   onSelectionChange,
 }: {
   label: string
-  defaultValue?: string
   items: string[]
-  /** Contrôlé : value + callback (sinon le select reste sur defaultValue). */
-  selectedKey?: string
+  selectedKey: string
   onSelectionChange?: (key: string) => void
 }) {
   return (
@@ -571,15 +667,11 @@ function Selectled({
       <p className="mb-1 text-body-2-medium text-text-primary">{label}</p>
       <Select
         aria-label={label}
-        {...(selectedKey !== undefined
-          ? {
-              selectedKey,
-              onSelectionChange: (k: Key | null) => onSelectionChange?.(k == null ? '' : String(k)),
-            }
-          : { defaultSelectedKey: defaultValue })}
+        selectedKey={selectedKey}
+        onSelectionChange={(k) => onSelectionChange?.(k == null ? '' : String(k))}
         items={items.map((i) => ({ id: i, label: i }))}
         className="w-full"
-        renderValue={<span className="truncate text-body-medium">{selectedKey ?? defaultValue}</span>}
+        renderValue={<span className="truncate text-body-medium">{selectedKey}</span>}
       >
         {items.map((i) => (
           <SelectItem key={i} id={i} textValue={i}>
@@ -588,31 +680,5 @@ function Selectled({
         ))}
       </Select>
     </div>
-  )
-}
-
-function SelectledSmall({
-  defaultValue,
-  items,
-  ariaLabel,
-}: {
-  defaultValue: string
-  items: string[]
-  ariaLabel: string
-}) {
-  return (
-    <Select
-      aria-label={ariaLabel}
-      defaultSelectedKey={defaultValue}
-      items={items.map((i) => ({ id: i, label: i }))}
-      size="sm"
-      renderValue={<span className="text-body-2-medium">{defaultValue}</span>}
-    >
-      {items.map((i) => (
-        <SelectItem key={i} id={i} textValue={i}>
-          {i}
-        </SelectItem>
-      ))}
-    </Select>
   )
 }

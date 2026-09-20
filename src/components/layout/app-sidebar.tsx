@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { cx } from '@/utils/cx'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
@@ -27,8 +27,7 @@ import {
 import { Kbd } from '@/components/base/kbd/kbd'
 import { Dropdown, DropdownTrigger, DropdownPopover, DropdownGroup, DropdownItem, DropdownDivider } from '@/components/base/dropdown/dropdown'
 import { PersonAvatar } from '@/components/common/person-avatar'
-import { ORG } from '@/data/org'
-import { useAppStore } from '@/store/app-store'
+import { api, type SessionUser } from '@/services/api'
 
 interface NavItem {
   to: string
@@ -78,11 +77,41 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   },
 ]
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Propriétaire',
+  admin: 'Admin',
+  manager: 'Manager',
+  employee: 'Employé',
+  auditor: 'Auditeur',
+}
+
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const navigate = useNavigate()
-  const { approvals } = useAppStore()
-  const pendingCount = approvals.filter((a) => a.status === 'pending').length
+  const [me, setMe] = useState<SessionUser | null>(null)
+  const [employeeCount, setEmployeeCount] = useState<number | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
+
+  // Session réelle + compteurs réels (une fois par montage — /status est léger,
+  // pas de calcul de risque comme /overview).
+  useEffect(() => {
+    api.me().then((res) => setMe(res?.user ?? null))
+    api.status().then((s) => {
+      if (s) setEmployeeCount(s.counts.employees)
+    })
+    api.request<{ approvals: unknown[] }>('/approvals?status=pending').then((res) => {
+      if (res) setPendingCount(res.approvals.length)
+    })
+  }, [])
+
+  async function logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      // la session cookie expirera de toute façon
+    }
+    navigate('/login')
+  }
 
   return (
     <aside
@@ -123,14 +152,16 @@ export function AppSidebar() {
                 K
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-body-2-medium text-white">{ORG.workspace}</span>
-                <span className="block text-caption-1-medium text-white/50">{ORG.employees} employés</span>
+                <span className="block truncate text-body-2-medium text-white">{me?.org_name ?? 'Chargement…'}</span>
+                <span className="block text-caption-1-medium text-white/50">
+                  {employeeCount !== null ? `${employeeCount} employés` : ''}
+                </span>
               </span>
               <HugeIcon icon={MenuIcon} size="xs" className="shrink-0 text-white/40 rotate-90" />
             </DropdownTrigger>
             <DropdownPopover aria-label="Menu de l'espace de travail">
               <DropdownGroup label="Espaces de travail">
-                <DropdownItem selected>🏢 {ORG.workspace}</DropdownItem>
+                <DropdownItem selected>🏢 {me?.org_name ?? '—'}</DropdownItem>
                 <DropdownItem onSelect={() => navigate('/setup')}>
                   <span className="inline-flex items-center gap-2">
                     <HugeIcon icon={PlusSignIcon} size="xs" />
@@ -255,12 +286,12 @@ export function AppSidebar() {
                 collapsed && 'w-auto px-1',
               )}
             >
-              <PersonAvatar name={ORG.currentUser} size="md" />
+              <PersonAvatar name={me?.name ?? '—'} size="md" />
               {!collapsed && (
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-body-2-medium text-white">{ORG.currentUser}</span>
+                  <span className="block truncate text-body-2-medium text-white">{me?.name ?? 'Chargement…'}</span>
                   <span className="block truncate text-caption-1-medium text-white/50">
-                    {ORG.currentUserRole}
+                    {me ? ROLE_LABELS[me.app_role] ?? me.app_role : ''}
                   </span>
                 </span>
               )}
@@ -273,7 +304,7 @@ export function AppSidebar() {
                     Mon profil
                   </span>
                 </DropdownItem>
-                <DropdownItem onSelect={() => navigate('/login')}>
+                <DropdownItem onSelect={() => void logout()}>
                   <span className="inline-flex items-center gap-2">
                     <HugeIcon icon={LogoutIcon} size="xs" />
                     Se déconnecter

@@ -24,7 +24,7 @@ export interface StartRunOptions {
 
 export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
   const agentRows = await dbh.query<{ id: string; name: string; status: string; model: string | null }>(
-    `SELECT id, name, status, model FROM agents WHERE organization_id = '${opts.organizationId}' AND key = '${opts.agentKey}'`,
+    `SELECT id, name, status, model FROM agents WHERE organization_id = $1::uuid AND key = $2`, [opts.organizationId, opts.agentKey],
   )
   const agent = agentRows[0]
   if (!agent) throw new Error(`agent introuvable: ${opts.agentKey}`)
@@ -32,9 +32,9 @@ export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
   const runId = randomUUID()
   await dbh.exec(
     `INSERT INTO agent_runs (id, organization_id, agent_id, initiator_user_id, initiator_name, trigger_id, goal, skill, status, model)
-     VALUES ('${runId}', '${opts.organizationId}', '${agent.id}', ${opts.initiatorUserId ? `'${opts.initiatorUserId}'` : 'NULL'},
-             '${(opts.initiatorName ?? 'utilisateur').replace(/'/g, "''")}', ${opts.triggerId ? `'${opts.triggerId}'` : 'NULL'},
-             '${opts.goal.replace(/'/g, "''")}', ${opts.skill ? `'${opts.skill}'` : 'NULL'}, 'running', ${agent.model ? `'${agent.model}'` : 'NULL'})`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'running', $9)`,
+    [runId, opts.organizationId, agent.id, opts.initiatorUserId ?? null, opts.initiatorName ?? 'utilisateur',
+     opts.triggerId ?? null, opts.goal, opts.skill ?? null, agent.model ?? null],
   )
 
   registerRunContext({
@@ -71,7 +71,7 @@ export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
     if (runStatus === 'suspended') {
       // Statut déterministe : une approval pending pour ce run = validation requise.
       const pending = await dbh.query<{ cnt: string }>(
-        `SELECT count(*)::text AS cnt FROM approvals WHERE run_id = '${runId}' AND status = 'pending'`,
+        `SELECT count(*)::text AS cnt FROM approvals WHERE run_id = $1::uuid AND status = 'pending'`, [runId],
       )
       status = Number(pending[0]?.cnt ?? 0) > 0 ? 'waiting_approval' : 'waiting_input'
       // Identifie le step suspendu pour le resume.
@@ -81,7 +81,8 @@ export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
       }
       if (suspendedStepId) {
         await dbh.exec(
-          `UPDATE agent_runs SET plan = jsonb_set(COALESCE(plan, '{}'::jsonb), '{suspendedStepId}', '"${suspendedStepId}"') WHERE id = '${runId}'`,
+          `UPDATE agent_runs SET plan = jsonb_set(COALESCE(plan, '{}'::jsonb), '{suspendedStepId}', to_jsonb($1::text)) WHERE id = $2::uuid`,
+          [suspendedStepId, runId],
         )
       }
     } else if (runStatus === 'failed') {
@@ -96,7 +97,8 @@ export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
       idx++
       await dbh.exec(
         `INSERT INTO agent_run_steps (run_id, step_index, description, status, output)
-         VALUES ('${runId}', ${idx}, '${stepId.replace(/'/g, "''")}', '${info.status ?? 'success'}', '${JSON.stringify(info).replace(/'/g, "''").slice(0, 4000)}'::jsonb)`,
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [runId, idx, stepId, info.status ?? 'success', JSON.stringify(info).slice(0, 4000)],
       ).catch(() => undefined)
     }
 
@@ -108,14 +110,15 @@ export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
       retryable: false,
     }
     await dbh.exec(
-      `UPDATE agent_runs SET status = '${status}', result = '${JSON.stringify(resultJson ?? {}).replace(/'/g, "''").slice(0, 100000)}'::jsonb,
-        verifier = '${JSON.stringify(verifier).replace(/'/g, "''")}'::jsonb, latency_ms = 0
-       WHERE id = '${runId}'`,
+      `UPDATE agent_runs SET status = $1, result = $2::jsonb,
+        verifier = $3::jsonb, latency_ms = 0
+       WHERE id = $4::uuid`,
+      [status, JSON.stringify(resultJson ?? {}).slice(0, 100000), JSON.stringify(verifier), runId],
     )
   } else {
     // Timeout : le workflow continue en arrière-plan (suspendu ou long) — statut lu via l'API.
     status = 'running'
-    await dbh.exec(`UPDATE agent_runs SET status = 'running' WHERE id = '${runId}'`)
+    await dbh.exec(`UPDATE agent_runs SET status = 'running' WHERE id = $1::uuid`, [runId])
   }
 
   await audit(dbh, opts.organizationId, {
@@ -127,14 +130,14 @@ export async function startAgentRun(dbh: DbHandle, opts: StartRunOptions) {
     detail: { agent: opts.agentKey, workflow: opts.workflowId, goal: opts.goal.slice(0, 200) },
   })
 
-  const final = await dbh.query(`SELECT * FROM agent_runs WHERE id = '${runId}'`)
+  const final = await dbh.query(`SELECT * FROM agent_runs WHERE id = $1::uuid`, [runId])
   return { run: final[0], mastraRunId: run.runId, status }
 }
 
 /** Reprise d'un run suspendu après décision humaine. */
 export async function resumeAgentRun(dbh: DbHandle, runId: string, resumeData: Record<string, unknown>, decidedBy: string) {
   const rows = await dbh.query<{ organization_id: string; plan: { mastraRunId?: string } | null; goal: string }>(
-    `SELECT organization_id, plan, goal FROM agent_runs WHERE id = '${runId}'`,
+    `SELECT organization_id, plan, goal FROM agent_runs WHERE id = $1::uuid`, [runId],
   )
   const row = rows[0]
   if (!row) throw new Error('run introuvable')
@@ -150,7 +153,7 @@ export async function resumeAgentRun(dbh: DbHandle, runId: string, resumeData: R
 
   const workflow = mastra.getWorkflow(workflowId)
   const run = await workflow.createRun({ runId: mastraRunId })
-  const planRows = await dbh.query<{ plan: { suspendedStepId?: string } | null }>(`SELECT plan FROM agent_runs WHERE id = '${runId}'`)
+  const planRows = await dbh.query<{ plan: { suspendedStepId?: string } | null }>(`SELECT plan FROM agent_runs WHERE id = $1::uuid`, [runId])
   const stepId = planRows[0]?.plan?.suspendedStepId
   const result = await run.resume({
     resumeData: { ...resumeData, decidedBy },
@@ -160,7 +163,7 @@ export async function resumeAgentRun(dbh: DbHandle, runId: string, resumeData: R
   const runStatus = (result as { status?: string }).status ?? 'completed'
   const newStatus = runStatus === 'suspended' ? 'waiting_approval' : runStatus === 'failed' ? 'failed' : 'completed'
   await dbh.exec(
-    `UPDATE agent_runs SET status = '${newStatus}', updated_at = now() WHERE id = '${runId}'`,
+    `UPDATE agent_runs SET status = $1, updated_at = now() WHERE id = $2::uuid`, [newStatus, runId],
   )
   await audit(dbh, row.organization_id, {
     actorName: decidedBy,
@@ -169,14 +172,14 @@ export async function resumeAgentRun(dbh: DbHandle, runId: string, resumeData: R
     targetId: runId,
     detail: { decision: resumeData.approved === false ? 'rejected' : 'approved', status: newStatus },
   })
-  const final = await dbh.query(`SELECT * FROM agent_runs WHERE id = '${runId}'`)
+  const final = await dbh.query(`SELECT * FROM agent_runs WHERE id = $1::uuid`, [runId])
   return final[0]
 }
 
 /** Workflow id + mastra run id mémorisés au démarrage (utilisés par resume). */
 export async function rememberWorkflowId(dbh: DbHandle, runId: string, workflowId: string, mastraRunId: string) {
   await dbh.exec(
-    `UPDATE agent_runs SET plan = jsonb_set(jsonb_set(COALESCE(plan, '{}'::jsonb), '{workflowId}', '"${workflowId}"'), '{mastraRunId}', '"${mastraRunId}"')
-     WHERE id = '${runId}'`,
+    `UPDATE agent_runs SET plan = jsonb_set(jsonb_set(COALESCE(plan, '{}'::jsonb), '{workflowId}', to_jsonb($1::text)), '{mastraRunId}', to_jsonb($2::text))
+     WHERE id = $3::uuid`, [workflowId, mastraRunId, runId],
   )
 }

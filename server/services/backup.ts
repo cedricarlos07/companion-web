@@ -78,10 +78,11 @@ export async function createBackup(dbh: DbHandle, organizationId?: string): Prom
   for (const table of TABLES_ORDER) {
     try {
       const exists = await dbh.query<{ exists: boolean }>(
-        `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '${table}') AS exists`,
+        `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1) AS exists`, [table],
       )
       if (!exists[0]?.exists) continue
-      const rows = await dbh.query<Record<string, unknown>>(`SELECT * FROM ${table}`)
+      // sql:ident — table issue de TABLES_ORDER, whitelist statique du code.
+      const rows = await dbh.query<Record<string, unknown>>(`SELECT /* sql:ident */ * FROM ${table}`)
       if (rows.length === 0) continue
       backupData[table] = rows
       tableCounts[table] = rows.length
@@ -130,25 +131,22 @@ export async function restoreBackup(dbh: DbHandle, backupDir: string, organizati
 
   // Effacer les données existantes (ordre inverse)
   for (const table of [...TABLES_ORDER].reverse()) {
-    await dbh.exec(`DELETE FROM ${table}`).catch(() => undefined)
+    await dbh.exec(`DELETE /* sql:ident */ FROM ${table}`).catch(() => undefined)
   }
 
   // Réinsérer dans l'ordre de dépendance
+  const IDENT_RE = /^[a-z_][a-z0-9_]*$/
   for (const table of TABLES_ORDER) {
+    if (!IDENT_RE.test(table)) throw new Error(`nom de table invalide: ${table}`)
     const rows = backupData[table]
     if (!rows || rows.length === 0) continue
     for (const row of rows) {
-      const columns = Object.keys(row as Record<string, unknown>)
-      const values = columns.map((col) => {
-        const val = (row as Record<string, unknown>)[col]
-        if (val === null || val === undefined) return 'NULL'
-        if (typeof val === 'object') return `'${JSON.stringify(val).replace(/'/g, "''")}'::jsonb`
-        if (typeof val === 'number') return String(val)
-        if (typeof val === 'boolean') return String(val)
-        return `'${String(val).replace(/'/g, "''")}'`
-      })
+      const columns = Object.keys(row as Record<string, unknown>).filter((c) => IDENT_RE.test(c))
+      const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ')
+      const params = columns.map((c) => (row as Record<string, unknown>)[c] ?? null)
       await dbh.exec(
-        `INSERT INTO ${table} (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT DO NOTHING`,
+        `INSERT /* sql:ident */ INTO ${table} (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+        params,
       ).catch((err) => {
         console.warn(`[restore] erreur table ${table}:`, String(err).slice(0, 120))
       })

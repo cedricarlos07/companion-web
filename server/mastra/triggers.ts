@@ -28,7 +28,7 @@ export async function dispatchEvent(
   const triggers = await dbh
     .query<{ id: string; agent_key: string; skill: string; rate_limit_per_hour: number }>(
       `SELECT id, agent_key, skill, rate_limit_per_hour FROM triggers
-       WHERE organization_id = '${organizationId}' AND event_type = '${eventType}' AND enabled = true`,
+       WHERE organization_id = $1::uuid AND event_type = $2 AND enabled = true`, [organizationId, eventType],
     )
     .catch(() => [])
 
@@ -36,7 +36,7 @@ export async function dispatchEvent(
   for (const t of triggers) {
     // Rate limit : nombre de runs déclenchés par ce trigger dans la dernière heure.
     const recent = await dbh
-      .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM agent_runs WHERE trigger_id = '${t.id}' AND created_at > now() - interval '1 hour'`)
+      .query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM agent_runs WHERE trigger_id = $1::uuid AND created_at > now() - interval '1 hour'`, [t.id])
       .catch(() => [{ cnt: '999' }])
     if (Number(recent[0]?.cnt ?? 0) >= t.rate_limit_per_hour) continue
 

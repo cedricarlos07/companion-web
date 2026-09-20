@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Card, StatCard } from '@/components/common/stat-card'
 import { PersonAvatar } from '@/components/common/person-avatar'
 import { ProgressRow } from '@/components/common/progress'
-import { RiskBadge, KnowledgeTypeBadge, knowledgeTypeMeta, CriticalBadge } from '@/components/common/badges'
+import { KnowledgeTypeBadge, knowledgeTypeMeta, CriticalBadge } from '@/components/common/badges'
 import { EmptyState } from '@/components/common/states'
 import { Button } from '@/components/base/buttons/button'
 import { Tabs, TabList, Tab, TabPanel } from '@/components/base/tabs/tabs'
-import { adaptIcon, HugeIcon } from '@/components/ui/huge-icon'
+import { adaptIcon } from '@/components/ui/huge-icon'
 import {
   AiBrain01Icon,
   AiChat02Icon,
@@ -16,63 +16,114 @@ import {
   ChartColumnIcon,
   Alert02Icon,
 } from '@/lib/icons'
-import { fullName, getEmployee, MOUSSA_UNIQUE_KNOWLEDGE } from '@/data/employees'
-import { MEMORIES } from '@/data/memories'
-import { PROJECTS } from '@/data/workspace'
 import { api, mapEmployee, mapMemory } from '@/services/api'
 import { formatNumber } from '@/lib/format'
+import { useAppStore } from '@/store/app-store'
 import type { Employee, Memory } from '@/types'
 
-function mapMemoryShim(row: Record<string, unknown>): Memory {
-  return mapMemory({
-    ...row,
-    role_title: row.role_title ?? '',
-    employee_name: row.employee_name ?? '',
-  })
+interface RiskData {
+  score: number
+  level: string
+  factors: { key: string; label: string; value: number; weight: number; detail: string }[]
+  stats: Record<string, number>
 }
 
 export function EmployeeDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const mockEmployee = id ? getEmployee(id) : undefined
+  const { pushToast } = useAppStore()
+  const [employee, setEmployee] = useState<Employee | null>(null)
+  const [memories, setMemories] = useState<Memory[]>([])
+  const [risk, setRisk] = useState<RiskData | null>(null)
+  const [handovers, setHandovers] = useState<{ id: string; status: string; readiness: number; created_at: string }[]>([])
+  const [onboardings, setOnboardings] = useState<{ id: string; created_at: string }[]>([])
+  const [notFound, setNotFound] = useState(false)
+  const [, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [statusPending, setStatusPending] = useState(false)
+  const [onboardingPending, setOnboardingPending] = useState(false)
 
-  // Employé réel (UUID) quand l'id n'est pas un id de démo.
-  const [realEmployee, setRealEmployee] = useState<Employee | null>(null)
-  const [realMemories, setRealMemories] = useState<Memory[]>([])
-  const [realRisk, setRealRisk] = useState<{ score: number; level: string; factors: { key: string; label: string; value: number; weight: number; detail: string }[] } | null>(null)
-  const [loading, setLoading] = useState(false)
+  const load = useCallback(async () => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+    const res = await api.employee(id)
+    if (res === null || !res.employee) {
+      // Distingue 404 d'un backend indisponible.
+      const list = await api.employees()
+      if (list === null) setError('Profil indisponible — backend injoignable.')
+      else setNotFound(!list.some((e) => e.id === id))
+      setLoading(false)
+      return
+    }
+    setEmployee(mapEmployee(res.employee))
+    setMemories((res.memories ?? []).map((m) => mapMemory({
+      ...m,
+      role_title: (m as Record<string, unknown>).role_title ?? '',
+      employee_name: (m as Record<string, unknown>).employee_name ?? '',
+    })))
+    setRisk(res.risk ?? null)
+    const hv = await api.request<{ handovers: Record<string, unknown>[] }>('/handovers')
+    setHandovers((hv?.handovers ?? [])
+      .filter((h) => h.employee_id === id)
+      .map((h) => ({
+        id: String(h.id),
+        status: String(h.status ?? 'analyzing'),
+        readiness: Number(h.readiness ?? 0),
+        created_at: String(h.created_at ?? ''),
+      })))
+    const onb = await api.onboardings() as unknown as { id: string; employee_id: string; created_at: string }[] | null
+    setOnboardings((onb ?? [])
+      .filter((o) => o.employee_id === id)
+      .map((o) => ({ id: String(o.id ?? o['id']), created_at: String(o.created_at ?? '') })))
+    setLoading(false)
+  }, [id])
 
   useEffect(() => {
-    if (mockEmployee || !id) return
-    setLoading(true)
-    api.employee(id).then((res) => {
-      setLoading(false)
-      if (!res?.employee) return
-      setRealEmployee(mapEmployee(res.employee))
-      setRealMemories((res.memories ?? []).map((m) => ({
-        ...mapMemoryShim(m),
-      })) as Memory[])
-      setRealRisk(res.risk)
-    })
-  }, [id, mockEmployee])
+    void load()
+  }, [load])
 
-  const employee: Employee | undefined = mockEmployee ?? realEmployee ?? undefined
-
-  const employeeMemories: Memory[] = employee
-    ? mockEmployee
-      ? MEMORIES.filter((m) => m.ownerId === employee.id)
-      : realMemories
-    : []
-  const employeeProjects = employee
-    ? PROJECTS.filter((p) => p.members.some((m) => m.startsWith(employee.firstName)))
-    : []
-
-  if (!employee) {
-    if (loading) {
-      return (
-        <EmptyState title="Chargement du profil…" />
-      )
+  async function changeStatus(next: Employee['status']) {
+    if (statusPending || !employee) return
+    setStatusPending(true)
+    const res = await api.setEmployeeStatus(employee.id, next)
+    if (res === null) {
+      setStatusPending(false)
+      pushToast('Changement impossible — permission refusée ou backend indisponible.', 'error')
+      return
     }
+    // « En départ » déclenche le trigger réel employee.leaving (Handover Agent).
+    let triggered = 0
+    if (next === 'leaving') {
+      const evt = await api.dispatchEvent('employee.leaving', { employeeId: employee.id })
+      triggered = evt.ok ? (evt.data.started?.length ?? 0) : 0
+    }
+    setStatusPending(false)
+    setEmployee((e) => (e ? { ...e, status: next } : e))
+    pushToast(
+      triggered > 0
+        ? 'Statut « En départ » enregistré — Handover Agent démarré par le déclencheur.'
+        : 'Statut mis à jour.',
+      'success',
+    )
+  }
+
+  async function generateOnboarding() {
+    if (onboardingPending || !employee) return
+    setOnboardingPending(true)
+    const res = await api.generateOnboarding(employee.id)
+    setOnboardingPending(false)
+    if (res === null) {
+      pushToast('Génération impossible — une intégration existe peut-être déjà, ou permission refusée.', 'error')
+      return
+    }
+    pushToast('Parcours d\'intégration généré depuis le Role Brain.', 'success')
+    navigate(`/onboarding/${res.onboarding.id}`)
+  }
+
+  const employeeMemories = memories
+
+  if (notFound) {
     return (
       <EmptyState
         title="Collaborateur introuvable."
@@ -80,9 +131,22 @@ export function EmployeeDetailPage() {
       />
     )
   }
+  if (!employee) {
+    return (
+      <div>
+        {error && (
+          <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+            {error}
+          </div>
+        )}
+        <EmptyState title="Chargement du profil…" />
+      </div>
+    )
+  }
 
-  const name = fullName(employee)
-  const isMoussa = employee.firstName === 'Moussa'
+  const name = `${employee.firstName} ${employee.lastName}`
+  const projectMemories = memories.filter((m) => m.type === 'project')
+  const relationshipMemories = memories.filter((m) => m.type === 'relationship')
 
   return (
     <div>
@@ -103,10 +167,28 @@ export function EmployeeDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" leadingIcon={adaptIcon(AiChat02Icon, 20)} onClick={() => navigate('/ask')}>
             Demander à Companion
           </Button>
+          {employee.status === 'former' ? (
+            <Button variant="secondary" disabled={statusPending} onClick={() => void changeStatus('active')}>
+              {statusPending ? '…' : 'Réactiver le compte'}
+            </Button>
+          ) : employee.status === 'leaving' ? (
+            <Button variant="secondary" disabled={statusPending} onClick={() => void changeStatus('former')}>
+              {statusPending ? '…' : 'Marquer comme parti'}
+            </Button>
+          ) : (
+            <Button variant="secondary" disabled={statusPending} onClick={() => void changeStatus('leaving')}>
+              {statusPending ? '…' : 'Marquer en départ'}
+            </Button>
+          )}
+          {employee.status !== 'former' && onboardings.length === 0 && (
+            <Button variant="secondary" disabled={onboardingPending} onClick={() => void generateOnboarding()}>
+              {onboardingPending ? 'Génération…' : "Générer l'intégration"}
+            </Button>
+          )}
           <Button leadingIcon={adaptIcon(Exchange01Icon, 20)} onClick={() => navigate(`/handovers/new/${employee.id}`)}>
             Préparer le départ
           </Button>
@@ -126,21 +208,21 @@ export function EmployeeDetailPage() {
         <StatCard label="Couverture" value={`${employee.coverage} %`} icon={ChartColumnIcon} />
       </div>
 
-      {/* Unique knowledge alert */}
-      {!mockEmployee && realRisk && (
+      {/* Risk factors — explicable, from computeEmployeeRisk */}
+      {risk && (
         <Card
           className="mb-5"
           title={
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-headline-medium text-text-primary">Risque de savoir — explicable</h2>
               <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-caption-1-semibold text-amber-800">
-                Score {realRisk.score} / 100 ({realRisk.level})
+                Score {risk.score} / 100 ({risk.level})
               </span>
             </div>
           }
         >
           <ul className="grid gap-2 sm:grid-cols-2">
-            {realRisk.factors.map((f) => (
+            {risk.factors.map((f) => (
               <li key={f.key} className="flex items-start justify-between gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5">
                 <span className="min-w-0 text-caption-1-regular text-text-secondary">
                   <span className="font-medium text-text-primary">{f.label}</span> (poids {f.weight} %) — {f.detail}
@@ -151,45 +233,49 @@ export function EmployeeDetailPage() {
           </ul>
         </Card>
       )}
-      {isMoussa && mockEmployee && (
-        <Card
-          className="mb-5"
-          title={
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-headline-medium text-text-primary">Connaissances uniques</h2>
-              <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-caption-1-semibold text-amber-800">
-                {employee.uniqueKnowledge} éléments dépendent principalement de Moussa
-              </span>
-            </div>
-          }
-          actions={
-            <Button size="xs" onClick={() => navigate(`/handovers/new/${employee.id}`)}>
-              Documenter maintenant
-            </Button>
-          }
-        >
-          <ul className="space-y-2">
-            {MOUSSA_UNIQUE_KNOWLEDGE.map((k) => (
-              <li
-                key={k.id}
-                className="flex items-center gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5"
-              >
-                <HugeIcon
-                  icon={Alert02Icon}
-                  size="sm"
-                  className={k.risk === 'critical' ? 'shrink-0 text-rose-500' : 'shrink-0 text-amber-500'}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-body-2-medium text-text-primary">{k.title}</p>
-                  <p className="truncate text-caption-1-medium text-text-tertiary">{k.detail}</p>
-                </div>
-                <KnowledgeTypeBadge type={k.type} />
-                <RiskBadge risk={k.risk === 'critical' ? 'critical' : k.risk === 'high' ? 'high' : 'moderate'} />
-              </li>
-            ))}
-          </ul>
+
+      {/* Handovers + Onboarding réels */}
+      <div className="mb-5 grid gap-4 lg:grid-cols-2">
+        <Card title="Handovers">
+          {handovers.length === 0 ? (
+            <p className="text-body-2-medium text-text-tertiary">Aucun handover pour cet employé.</p>
+          ) : (
+            <ul className="space-y-2">
+              {handovers.map((h) => (
+                <li key={h.id} className="flex items-center justify-between gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5">
+                  <button type="button" onClick={() => navigate(`/handovers/${h.id}`)} className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-body-2-medium text-text-primary">
+                      Handover {h.created_at.slice(0, 10)}
+                    </span>
+                    <span className="text-caption-1-medium text-text-tertiary">préparation {h.readiness} %</span>
+                  </button>
+                  <Button variant="secondary" size="xs" onClick={() => navigate(`/handovers/${h.id}`)}>
+                    Ouvrir
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
-      )}
+        <Card title="Onboarding">
+          {onboardings.length === 0 ? (
+            <p className="text-body-2-medium text-text-tertiary">Aucun parcours d'intégration.</p>
+          ) : (
+            <ul className="space-y-2">
+              {onboardings.map((o) => (
+                <li key={o.id} className="flex items-center justify-between gap-3 rounded-xl border border-border-button-default px-3.5 py-2.5">
+                  <span className="min-w-0 flex-1 truncate text-body-2-medium text-text-primary">
+                    Parcours démarré le {o.created_at.slice(0, 10)}
+                  </span>
+                  <Button variant="secondary" size="xs" onClick={() => navigate(`/onboarding/${o.id}`)}>
+                    Ouvrir
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
       {/* Tabs */}
       <Tabs defaultSelectedKey="overview">
@@ -205,13 +291,12 @@ export function EmployeeDetailPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Couverture du poste">
               <div className="space-y-3">
-                {employee.risk !== undefined && !mockEmployee && (
-                  <ProgressRow label="Couverture estimée" value={employee.coverage} />
+                <ProgressRow label="Couverture estimée" value={employee.coverage} />
+                {risk?.stats && Object.entries(risk.stats).length > 0 && (
+                  <p className="text-caption-1-medium text-text-tertiary">
+                    Détail du risque calculé côté serveur — voir la section Risque de savoir ci-dessus.
+                  </p>
                 )}
-                <ProgressRow label="Procédures documentées" value={isMoussa ? 79 : 82} />
-                <ProgressRow label="Décisions expliquées" value={isMoussa ? 68 : 74} />
-                <ProgressRow label="Relations cartographiées" value={isMoussa ? 91 : 80} />
-                <ProgressRow label="Tâches récurrentes" value={isMoussa ? 74 : 77} />
               </div>
             </Card>
             <Card title={`Connaissances récentes de ${name}`}>
@@ -277,24 +362,16 @@ export function EmployeeDetailPage() {
 
         <TabPanel id="projects" className="pt-4">
           <Card>
-            {employeeProjects.length === 0 ? (
-              <p className="py-6 text-center text-body-2-regular text-text-tertiary">Aucun projet actif.</p>
+            {projectMemories.length === 0 ? (
+              <p className="py-6 text-center text-body-2-regular text-text-tertiary">Aucun projet actif documenté.</p>
             ) : (
               <ul className="space-y-2">
-                {employeeProjects.map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-center gap-3 rounded-xl border border-border-button-default p-3"
-                  >
+                {projectMemories.map((p) => (
+                  <li key={p.id} className="flex items-center gap-3 rounded-xl border border-border-button-default p-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-body-2-medium text-text-primary">{p.name}</p>
-                      <p className="text-caption-1-medium text-text-tertiary">
-                        {p.clientName} · {p.updated}
-                      </p>
+                      <p className="truncate text-body-2-medium text-text-primary">{p.title}</p>
+                      <p className="text-caption-1-medium text-text-tertiary">{p.updated}</p>
                     </div>
-                    <span className="text-caption-1-medium text-text-secondary">
-                      {p.status === 'active' ? 'Actif' : p.status === 'at-risk' ? 'À risque' : 'En clôture'}
-                    </span>
                   </li>
                 ))}
               </ul>
@@ -304,16 +381,33 @@ export function EmployeeDetailPage() {
 
         <TabPanel id="relationships" className="pt-4">
           <Card>
-            <p className="text-body-2-regular text-text-secondary">
-              Clients et interlocuteurs associés à {name}, cartographiés depuis le Company Brain.
-            </p>
+            {relationshipMemories.length === 0 ? (
+              <p className="text-body-2-regular text-text-tertiary">
+                Aucune relation cartographiée pour le moment.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {relationshipMemories.map((r) => (
+                  <li key={r.id} className="flex items-center gap-3 rounded-xl border border-border-button-default p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-body-2-medium text-text-primary">{r.title}</p>
+                      <p className="text-caption-1-medium text-text-tertiary">
+                        {r.scope} · {r.updated}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </TabPanel>
 
         <TabPanel id="activity" className="pt-4">
           <Card>
             <p className="text-body-2-regular text-text-secondary">
-              Dernière activité : {employee.lastActive}.
+              Handovers : {handovers.length} · onboardings : {onboardings.length} · mémoires :{' '}
+              {memories.length}. Le détail complet des actions est dans le journal d'audit de
+              l'organisation (Contrôle → Activité).
             </p>
           </Card>
         </TabPanel>

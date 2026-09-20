@@ -38,13 +38,13 @@ export async function verifyMcpToken(dbh: DbHandle, token: string): Promise<McpC
   const hash = hashToken(token)
   const rows = await dbh.query<McpClientRow & { expires_at: string | null }>(
     `SELECT id, organization_id, name, status, allowed_scopes, allowed_tools, expires_at
-     FROM mcp_clients WHERE token_hash = '${hash}'`,
+     FROM mcp_clients WHERE token_hash = $1`, [hash],
   )
   const client = rows[0]
   if (!client) return null
   if (client.status !== 'active') return null
   if (client.expires_at && new Date(client.expires_at) < new Date()) return null
-  await dbh.exec(`UPDATE mcp_clients SET last_used_at = now() WHERE id = '${client.id}'`)
+  await dbh.exec(`UPDATE mcp_clients SET last_used_at = now() WHERE id = $1::uuid`, [client.id])
   return client
 }
 

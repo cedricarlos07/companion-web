@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Gate SQL (aucune interpolation dynamique)
+        run: npm run check:sql
+      - name: Gate frontend (allowlist anti-mock vide)
+        run: npm run check:frontend
+      - name: Typecheck serveur
+        run: npm run typecheck:server
+      - name: Typecheck frontend
+        run: npx tsc --noEmit
+      - name: Build production (ALLOW_MOCK_DATA interdit)
+        run: npm run build
+      # Les batteries E2E (test:battery, handover-*, frontend-real, golden)
+      # exigent Ollama + un navigateur local : elles restent un prérequis
+      # avant merge/push documenté dans docs/FRONTEND-AUDIT.md.

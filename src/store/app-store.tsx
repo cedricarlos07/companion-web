@@ -26,6 +26,8 @@ interface AppStore {
   toasts: Toast[]
   setAgentStatus: (agentId: string, status: AgentRunState) => void
   decideApproval: (approvalId: string, decision: 'approved' | 'rejected') => void
+  /** Hydrate les approbations depuis l'API réelle (badge sidebar, dashboards). */
+  setApprovals: (list: Approval[]) => void
   dismissNotification: (notificationId: string) => void
   markNotificationsRead: () => void
   pushToast: (message: string, tone?: Toast['tone']) => void
@@ -35,7 +37,7 @@ const StoreContext = createContext<AppStore | null>(null)
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [agents, setAgents] = useState<Agent[]>(AGENTS)
-  const [approvals, setApprovals] = useState<Approval[]>(APPROVALS)
+  const [approvals, setApprovalsList] = useState<Approval[]>(APPROVALS)
   const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS)
   const [toasts, setToasts] = useState<Toast[]>([])
   const toastSeq = useRef(0)
@@ -60,12 +62,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const decideApproval = useCallback(
     (approvalId: string, decision: 'approved' | 'rejected') => {
-      setApprovals((list) =>
+      setApprovalsList((list) =>
         list.map((a) => (a.id === approvalId ? { ...a, status: decision } : a)),
       )
     },
     [],
   )
+
+  const setApprovals = useCallback((list: Approval[]) => {
+    setApprovalsList(list)
+  }, [])
 
   const dismissNotification = useCallback((notificationId: string) => {
     setNotifications((list) => list.filter((n) => n.id !== notificationId))
@@ -83,6 +89,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       toasts,
       setAgentStatus,
       decideApproval,
+      setApprovals,
       dismissNotification,
       markNotificationsRead,
       pushToast,
@@ -94,6 +101,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       toasts,
       setAgentStatus,
       decideApproval,
+      setApprovals,
       dismissNotification,
       markNotificationsRead,
       pushToast,

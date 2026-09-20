@@ -76,8 +76,8 @@ export async function bootstrapActivepieces(
   // Génère le secret webhook (stocké dans settings pour validation du endpoint).
   const webhookSecret = require('node:crypto').randomBytes(32).toString('hex')
   await dbh.exec(
-    `INSERT INTO settings (organization_id, key, value) VALUES ('${organizationId}', 'webhook_secret', '"${webhookSecret}"')
-     ON CONFLICT (organization_id, key) DO UPDATE SET value = '"${webhookSecret}"', updated_at = now()`,
+    `INSERT INTO settings (organization_id, key, value) VALUES ($1, 'webhook_secret', '"$2"')
+     ON CONFLICT (organization_id, key) DO UPDATE SET value = '"$3"', updated_at = now()`, [organizationId, webhookSecret, webhookSecret],
   )
   const companionUrl = process.env.COMPAION_URL ?? 'http://host.docker.internal:5299'
 

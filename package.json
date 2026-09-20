@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run check:sql && npm run check:frontend && tsc --noEmit && vite build",
+    "check:sql": "node scripts/check-sql.mjs",
+    "build:marketing": "vite build --config vite.marketing.config.ts",
     "preview": "vite preview",
     "dev:server": "tsx server/index.ts",
     "dev:server:watch": "tsx watch server/index.ts",
@@ -16,7 +18,14 @@
     "test:agents": "node scripts/test-agents.mjs",
     "test:agent-security": "node scripts/test-agent-security.mjs",
     "test:mcp": "node scripts/test-mcp.mjs",
-    "security:check": "bash scripts/security-check.sh"
+    "test:billing": "node scripts/test-billing.mjs",
+    "security:check": "bash scripts/security-check.sh",
+    "test:battery": "node scripts/test-battery.mjs",
+    "check:frontend": "node scripts/check-frontend.mjs",
+    "test:handover-e2e": "node scripts/test-handover-e2e.mjs",
+    "test:handover-ui": "node scripts/test-handover-ui.mjs",
+    "test:frontend-real-data": "node scripts/test-frontend-real.mjs",
+    "test:golden-e2e": "node scripts/test-golden-e2e.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.49",

@@ -78,17 +78,17 @@ export async function ingestDocument(
   // Anti-réingestion : si le document a déjà un external_id, vérifier qu'il n'existe pas déjà.
   const dup = await dbh.query<{ cnt: string }>(
     `SELECT count(*)::text AS cnt FROM documents d1
-     WHERE d1.id = '${documentId}' AND d1.external_id IS NOT NULL
-       AND EXISTS (SELECT 1 FROM documents d2 WHERE d2.external_id = d1.external_id AND d2.id <> d1.id AND d2.organization_id = d1.organization_id)`,
+     WHERE d1.id = $1 AND d1.external_id IS NOT NULL
+       AND EXISTS (SELECT 1 FROM documents d2 WHERE d2.external_id = d1.external_id AND d2.id <> d1.id AND d2.organization_id = d1.organization_id)`, [documentId],
   )
   if (Number(dup[0]?.cnt ?? 0) > 0) {
-    await dbh.exec(`UPDATE documents SET status = 'failed', status_detail = 'déjà ingéré (external_id dupliqué)' WHERE id = '${documentId}'`)
+    await dbh.exec(`UPDATE documents SET status = 'failed', status_detail = 'déjà ingéré (external_id dupliqué)' WHERE id = $1::uuid`, [documentId])
     return { documentId, pagesApprox: 0, chunksIndexed: 0, candidatesFound: 0, memoriesCreated: 0, confirmations: 0, conflicts: 0, engine: 'heuristic' }
   }
   const docs = await dbh.query<{
     id: string; organization_id: string; title: string; mime_type: string;
     storage_path: string | null; raw_text: string | null; source_id: string | null;
-  }>(`SELECT id, organization_id, title, mime_type, storage_path, raw_text, source_id FROM documents WHERE id = '${documentId}'`)
+  }>(`SELECT id, organization_id, title, mime_type, storage_path, raw_text, source_id FROM documents WHERE id = $1::uuid`, [documentId])
   const doc = docs[0]
   if (!doc) throw new Error(`document introuvable: ${documentId}`)
 
@@ -118,8 +118,8 @@ export async function ingestDocument(
       FROM sources s
       LEFT JOIN employees e ON e.id::text = (s.config->>'employeeId')
       LEFT JOIN roles r ON r.id = e.role_id
-      WHERE s.id = ${quoteStr(doc.source_id)}
-    `)
+      WHERE s.id = $1
+    `, [doc.source_id])
     if (ownerRows[0]) {
       employeeId = ownerRows[0].employee_id ?? null
       roleId = ownerRows[0].role_id ?? null
@@ -140,7 +140,7 @@ export async function ingestDocument(
     const id = crypto.randomUUID()
     await dbh.exec(
       `INSERT INTO chunks (id, document_id, organization_id, chunk_index, content, embedding, embedding_provider)
-       VALUES ('${id}', '${doc.id}', '${doc.organization_id}', ${i}, ${quoteStr(part)}, '${toPgVectorLiteral(vector)}'::vector, '${provider}')`,
+       VALUES ($1, $2, $3, $4, $5, $6::vector, $7)`, [id, doc.id, doc.organization_id, i, part, toPgVectorLiteral(vector), provider],
     )
     chunkIds.push(id)
     chunkCounter++
@@ -221,11 +221,6 @@ export async function ingestDocument(
 
 async function setStatus(dbh: DbHandle, documentId: string, status: string, detail: string) {
   await dbh.db.update(documents).set({ status, statusDetail: detail }).where(eq(documents.id, documentId))
-}
-
-function quoteStr(s: string | null | undefined): string {
-  if (s === null || s === undefined) return 'NULL'
-  return `'${s.replace(/'/g, "''")}'`
 }
 
 /** Ensures the upload directory exists. */

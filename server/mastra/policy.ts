@@ -50,7 +50,7 @@ export async function authorizeToolCall(
 
   // 0. Tool inconnu → refus immédiat.
   const rows = await dbh.query<{ id: string; name: string; status: string; autonomy: string; allowed_tools: unknown; max_run_tokens: number }>(
-    `SELECT id, name, status, autonomy, allowed_tools, max_run_tokens FROM agents WHERE id = '${agentId}' AND organization_id = '${organizationId}'`,
+    `SELECT id, name, status, autonomy, allowed_tools, max_run_tokens FROM agents WHERE id = $1::uuid AND organization_id = $2::uuid`, [agentId, organizationId],
   )
   const agent = rows[0]
   if (!agent) throw new PolicyDeniedError('agent introuvable dans cette organisation', 'tool_not_allowed')
@@ -58,7 +58,7 @@ export async function authorizeToolCall(
 
   // 1. Kill switch organisation.
   const ks = await dbh.query<{ value: { enabled?: boolean } }>(
-    `SELECT value FROM settings WHERE organization_id = '${organizationId}' AND key = 'agents'`,
+    `SELECT value FROM settings WHERE organization_id = $1::uuid AND key = 'agents'`, [organizationId],
   ).catch(() => [])
   if (process.env.AGENTS_DISABLED === '1' || ks[0]?.value?.enabled === false) {
     await logDenial(ctx, tool, 'kill_switch', 'agents désactivés (kill switch)')
@@ -79,7 +79,7 @@ export async function authorizeToolCall(
   // 4. Budget tokens quotidien (approximation : somme des runs du jour).
   const daily = await dbh.query<{ total: string }>(
     `SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0)::text AS total FROM tool_calls
-     WHERE agent_id = '${agentId}' AND created_at > now() - interval '24 hours'`,
+     WHERE agent_id = $1::uuid AND created_at > now() - interval '24 hours'`, [agentId],
   )
   if (Number(daily[0]?.total ?? 0) > agent.max_run_tokens * 50) {
     await logDenial(ctx, tool, 'budget_exceeded', 'budget quotidien de tokens dépassé')
@@ -135,10 +135,10 @@ export async function recordToolCall(
   })
   if (ctx.runId && UUID_RE.test(ctx.runId)) {
     await ctx.dbh.exec(
-      `UPDATE agent_runs SET prompt_tokens = prompt_tokens + ${promptTokens},
-        completion_tokens = completion_tokens + ${completionTokens},
-        estimated_cost = estimated_cost + ${(promptTokens + completionTokens) * 0.0000001}
-       WHERE id = '${ctx.runId}'`,
+      `UPDATE agent_runs SET prompt_tokens = prompt_tokens + $1,
+        completion_tokens = completion_tokens + $2,
+        estimated_cost = estimated_cost + $3
+       WHERE id = $4::uuid`, [promptTokens, completionTokens, (promptTokens + completionTokens) * 0.0000001, ctx.runId],
     ).catch(() => undefined)
   }
 }
@@ -149,7 +149,7 @@ export async function agentCanReadScope(
   agentId: string,
   requiredScope: 'company' | 'role' | 'department' | 'employee',
 ): Promise<boolean> {
-  const rows = await dbh.query<{ memory_scopes: string[] }>(`SELECT memory_scopes FROM agents WHERE id = '${agentId}'`)
+  const rows = await dbh.query<{ memory_scopes: string[] }>(`SELECT memory_scopes FROM agents WHERE id = $1::uuid`, [agentId])
   const scopes = rows[0]?.memory_scopes ?? []
   return scopes.includes('*') || scopes.includes(requiredScope)
 }

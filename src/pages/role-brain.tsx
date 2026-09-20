@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, StatCard } from '@/components/common/stat-card'
@@ -7,27 +7,97 @@ import { RiskBadge, KnowledgeTypeBadge } from '@/components/common/badges'
 import { EmptyState } from '@/components/common/states'
 import { ProgressRow } from '@/components/common/progress'
 import { Button } from '@/components/base/buttons/button'
+import { Input } from '@/components/base/input/input'
 import { Tabs, TabList, Tab, TabPanel } from '@/components/base/tabs/tabs'
 import { AiBrain01Icon, FileValidationIcon, GavelIcon, UserGroupIcon, ChartColumnIcon } from '@/lib/icons'
-import { getRole } from '@/data/roles'
-import { MEMORIES } from '@/data/memories'
+import { api } from '@/services/api'
 import { formatNumber } from '@/lib/format'
+import { useAppStore } from '@/store/app-store'
 import { cx } from '@/utils/cx'
+
+import type { KnowledgeType } from '@/types'
+
+interface RoleMemory {
+  id: string
+  type: KnowledgeType
+  title: string
+  content: string
+  scope: string
+  status: string
+  confidence: number
+  contributor: string | null
+  employee_id: string | null
+  updated_at: string
+}
+
+interface Contributor {
+  name: string
+  contributions: number
+  from: string
+  to: string
+  employee_id: string | null
+}
+
+interface RoleRisk {
+  score: number
+  level: string
+  factors: { key: string; label: string; value: number; weight: number; detail: string }[]
+}
+
+interface RoleBrainData {
+  role: { id: string; title: string; department: string; coverage_target?: number }
+  memories: RoleMemory[]
+  contributors: Contributor[]
+  risk: RoleRisk | null
+}
 
 export function RoleBrainPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const role = id ? getRole(id) : undefined
+  const { pushToast } = useAppStore()
+  const [data, setData] = useState<RoleBrainData | null>(null)
+  const [notFound, setNotFound] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [targetDraft, setTargetDraft] = useState('')
+  const [targetPending, setTargetPending] = useState(false)
 
-  const roleMemories = useMemo(() => {
-    if (!role) return []
-    return MEMORIES.filter((m) => m.roleTitle === role.title)
-  }, [role])
+  const load = useCallback(async () => {
+    if (!id) return
+    setError(null)
+    const res = await api.role(id)
+    if (res === null || !res.role) {
+      const list = await api.roles()
+      if (list === null) setError('Role Brain indisponible — backend injoignable.')
+      else setNotFound(true)
+      return
+    }
+    setData(res as unknown as RoleBrainData)
+    setTargetDraft(String(Number((res.role as { coverage_target?: number }).coverage_target ?? 90)))
+  }, [id])
 
-  const filteredByTab = (types: string[]) =>
-    roleMemories.filter((m) => types.includes(m.type))
+  async function saveTarget() {
+    if (targetPending || !id) return
+    const value = Math.floor(Number(targetDraft))
+    if (!Number.isFinite(value) || value < 30 || value > 100) {
+      pushToast('La cible doit être un entier entre 30 et 100.', 'error')
+      return
+    }
+    setTargetPending(true)
+    const res = await api.setRoleCoverageTarget(id, value)
+    setTargetPending(false)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    setData((d) => (d ? { ...d, role: { ...d.role, coverage_target: res.data.coverageTarget } } : d))
+    pushToast('Cible de couverture enregistrée.', 'success')
+  }
 
-  if (!role) {
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  if (notFound) {
     return (
       <EmptyState
         title="Rôle introuvable."
@@ -35,6 +105,31 @@ export function RoleBrainPage() {
       />
     )
   }
+  if (!data) {
+    return (
+      <div>
+        {error && (
+          <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+            {error}
+          </div>
+        )}
+        <EmptyState title="Chargement du Role Brain…" />
+      </div>
+    )
+  }
+
+  const role = data.role
+  const roleMemories = data.memories
+  const contributors = data.contributors
+  const risk = data.risk
+
+  const count = (types: string[]) => roleMemories.filter((m) => types.includes(m.type)).length
+  const filteredByTab = (types: string[]) => roleMemories.filter((m) => types.includes(m.type))
+  const pct = (types: string[]) => roleMemories.length > 0
+    ? Math.round((count(types) / roleMemories.length) * 100)
+    : 0
+  const coverage = pct(['procedure', 'decision'])
+  const maxContrib = Math.max(1, ...contributors.map((c) => c.contributions))
 
   return (
     <div>
@@ -54,72 +149,79 @@ export function RoleBrainPage() {
             <span className="text-text-secondary">{role.title}</span>
           </nav>
         }
-        actions={<RiskBadge risk={role.risk} label={`Risque : ${role.risk === 'critical' ? 'critique' : role.risk === 'moderate' ? 'modéré' : 'faible'}`} />}
+        actions={
+          risk ? (
+            <RiskBadge
+              risk={risk.level === 'critical' ? 'critical' : risk.level === 'high' ? 'high' : risk.level === 'moderate' ? 'moderate' : 'low'}
+              label={`Risque de savoir : ${risk.score} / 100`}
+            />
+          ) : undefined
+        }
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <StatCard label="Connaissances" value={formatNumber(role.memories)} icon={AiBrain01Icon} />
-        <StatCard label="Procédures" value={String(role.procedures)} icon={FileValidationIcon} />
-        <StatCard label="Décisions" value={String(role.decisions)} icon={GavelIcon} />
-        <StatCard label="Contributeurs" value={String(role.contributors)} icon={UserGroupIcon} />
-        <StatCard label="Couverture" value={`${role.coverage} %`} icon={ChartColumnIcon} />
+        <StatCard label="Connaissances" value={formatNumber(roleMemories.length)} icon={AiBrain01Icon} />
+        <StatCard label="Procédures" value={String(count(['procedure']))} icon={FileValidationIcon} />
+        <StatCard label="Décisions" value={String(count(['decision']))} icon={GavelIcon} />
+        <StatCard label="Contributeurs" value={String(contributors.length)} icon={UserGroupIcon} />
+        <StatCard label="Couverture" value={`${coverage} %`} icon={ChartColumnIcon} />
       </div>
 
-      {/* Contributor timeline — the institutional knowledge survives turnover */}
       <Card title="Contributeurs du rôle" className="mb-5">
         <p className="mb-4 text-body-2-regular text-text-secondary">
           Le savoir de ce rôle a été construit par plusieurs personnes. Quand l'une part, ses contributions
           restent dans la mémoire du rôle.
         </p>
-        <ol className="relative space-y-0">
-          {role.contributorTimeline.map((c, i) => {
-            const isCurrent = c.to === "Aujourd'hui"
-            return (
-              <li key={`${c.name}-${i}`} className="relative flex items-center gap-4 pb-5 last:pb-0">
-                {i < role.contributorTimeline.length - 1 && (
-                  <span className="absolute top-10 left-5 h-full w-px bg-separator-border" aria-hidden />
-                )}
-                <span
-                  className={cx(
-                    'z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2',
-                    isCurrent ? 'border-accent-500 bg-accent-50' : 'border-border-button-default bg-background-primary-default',
+        {contributors.length === 0 ? (
+          <p className="text-body-2-regular text-text-tertiary">Aucun contributeur enregistré.</p>
+        ) : (
+          <ol className="relative space-y-0">
+            {contributors.map((c, i) => {
+              const isCurrent = i === contributors.length - 1
+              return (
+                <li key={`${c.name}-${i}`} className="relative flex items-center gap-4 pb-5 last:pb-0">
+                  {i < contributors.length - 1 && (
+                    <span className="absolute top-10 left-5 h-full w-px bg-separator-border" aria-hidden />
                   )}
-                >
-                  <PersonAvatar name={c.name} size="sm" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-body-medium font-medium text-text-primary">{c.name}</span>
-                    <span className="rounded-md bg-background-secondary-default px-1.5 py-0.5 text-caption-1-medium text-text-secondary tabular-nums">
-                      {c.from} → {c.to}
-                    </span>
-                    {isCurrent && (
-                      <span className="rounded-md bg-accent-100 px-1.5 py-0.5 text-caption-1-semibold text-accent-700">
-                        En poste
-                      </span>
+                  <span
+                    className={cx(
+                      'z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2',
+                      isCurrent ? 'border-accent-500 bg-accent-50' : 'border-border-button-default bg-background-primary-default',
                     )}
+                  >
+                    <PersonAvatar name={c.name} size="sm" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-body-medium font-medium text-text-primary">{c.name}</span>
+                      <span className="rounded-md bg-background-secondary-default px-1.5 py-0.5 text-caption-1-medium text-text-secondary tabular-nums">
+                        {String(c.from).slice(0, 10)} → {isCurrent ? "aujourd'hui" : String(c.to).slice(0, 10)}
+                      </span>
+                      {isCurrent && (
+                        <span className="rounded-md bg-accent-100 px-1.5 py-0.5 text-caption-1-semibold text-accent-700">
+                          Contributeur actif
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-caption-1-medium text-text-secondary">
+                      {formatNumber(c.contributions)} contributions au Role Brain
+                    </p>
                   </div>
-                  <p className="text-caption-1-medium text-text-secondary">
-                    {formatNumber(c.contributions)} contributions au Role Brain
-                  </p>
-                </div>
-                <div className="hidden w-40 shrink-0 sm:block">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-background-tertiary-default">
-                    <div
-                      className={cx('h-full rounded-full', isCurrent ? 'bg-accent-500' : 'bg-foreground-icon-quaternary')}
-                      style={{
-                        width: `${Math.min(100, (c.contributions / Math.max(...role.contributorTimeline.map((x) => x.contributions))) * 100)}%`,
-                      }}
-                    />
+                  <div className="hidden w-40 shrink-0 sm:block">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-background-tertiary-default">
+                      <div
+                        className={cx('h-full rounded-full', isCurrent ? 'bg-accent-500' : 'bg-foreground-icon-quaternary')}
+                        style={{ width: `${Math.min(100, (c.contributions / maxContrib) * 100)}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
-              </li>
-            )
-          })}
-        </ol>
+                </li>
+              )
+            })}
+          </ol>
+        )}
       </Card>
 
-      {/* Memory tabs */}
       <Tabs defaultSelectedKey="overview">
         <TabList aria-label="Sections du Role Brain">
           <Tab id="overview">Aperçu</Tab>
@@ -135,9 +237,26 @@ export function RoleBrainPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Couverture">
               <div className="space-y-3">
-                <ProgressRow label="Procédures documentées" value={role.coverage} />
-                <ProgressRow label="Décisions avec rationale" value={Math.max(40, role.coverage - 12)} />
-                <ProgressRow label="Leçons partagées" value={Math.min(96, role.coverage + 8)} />
+                <ProgressRow label="Procédures documentées" value={pct(['procedure'])} />
+                <ProgressRow label="Décisions archivées" value={pct(['decision'])} />
+                <ProgressRow label="Leçons partagées" value={pct(['lesson'])} />
+                <div className="flex flex-wrap items-end gap-2 border-t border-separator-border pt-3">
+                  <div className="min-w-40 flex-1">
+                    <Input
+                      label="Cible de couverture du rôle (%)"
+                      value={targetDraft}
+                      onChange={setTargetDraft}
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    disabled={targetPending || Number(targetDraft) === (role.coverage_target ?? 90)}
+                    onClick={() => void saveTarget()}
+                  >
+                    {targetPending ? '…' : 'Enregistrer'}
+                  </Button>
+                </div>
               </div>
             </Card>
             <Card title="Connaissances récentes du rôle">
@@ -183,17 +302,17 @@ export function RoleBrainPage() {
         <TabPanel id="contributors" className="pt-4">
           <Card>
             <ul className="space-y-2">
-              {role.contributorTimeline.map((c, i) => (
+              {contributors.map((c, i) => (
                 <li key={i} className="flex items-center gap-3 rounded-xl border border-border-button-default p-3">
                   <PersonAvatar name={c.name} size="md" />
                   <div className="min-w-0 flex-1">
                     <p className="text-body-2-medium text-text-primary">{c.name}</p>
                     <p className="text-caption-1-medium text-text-tertiary">
-                      {c.from} → {c.to} · {formatNumber(c.contributions)} contributions
+                      {String(c.from).slice(0, 10)} → {c.to ? String(c.to).slice(0, 10) : 'aujourd\'hui'} · {formatNumber(c.contributions)} contributions
                     </p>
                   </div>
-                  {c.employeeId && (
-                    <Button variant="secondary" size="xs" onClick={() => navigate(`/people/${c.employeeId}`)}>
+                  {c.employee_id && (
+                    <Button variant="secondary" size="xs" onClick={() => navigate(`/people/${c.employee_id}`)}>
                       Voir le profil
                     </Button>
                   )}
@@ -207,7 +326,7 @@ export function RoleBrainPage() {
   )
 }
 
-function MemoryList({ memories }: { memories: ReturnType<typeof MEMORIES.filter> }) {
+function MemoryList({ memories }: { memories: (RoleMemory & { type: KnowledgeType })[] }) {
   const navigate = useNavigate()
   if (memories.length === 0) {
     return (
@@ -231,7 +350,9 @@ function MemoryList({ memories }: { memories: ReturnType<typeof MEMORIES.filter>
               <KnowledgeTypeBadge type={m.type} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-body-medium text-text-primary">{m.title}</span>
-                <span className="block text-caption-1-medium text-text-tertiary">{m.scope} · {m.updated}</span>
+                <span className="block text-caption-1-medium text-text-tertiary">
+                  {m.scope} · {m.status} · {String(m.updated_at ?? '').slice(0, 10)}
+                </span>
               </span>
               <span className="text-body-2-semibold text-text-secondary tabular-nums">{m.confidence} %</span>
             </button>

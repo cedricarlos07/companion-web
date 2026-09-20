@@ -87,7 +87,7 @@ export async function createMemory(dbh: DbHandle, input: CreateMemoryInput) {
         })
       }
       const existing = await dbh.query<{ id: string }>(
-        `SELECT id FROM memories WHERE id = '${verdict.duplicateOfId}'`,
+        `SELECT id FROM memories WHERE id = $1::uuid`, [verdict.duplicateOfId],
       )
       return { memory: existing[0] ?? null, verdict, created: false }
     }
@@ -170,22 +170,19 @@ async function checkDeduplication(
   // Le périmètre de déduplication est le propriétaire : la même connaissance
   // détenue par DEUX employés n'est pas un doublon à fusionner — c'est du
   // coverage (le moteur de risque compte les doublons inter-titulaires).
-  const ownerClause = employeeId
-    ? `AND (m.employee_id = '${employeeId}' OR m.employee_id IS NULL)`
-    : `AND m.employee_id IS NULL`
 
   const candidates = await dbh.query<{ id: string; title: string; embedding: string | null; similarity: number }>(`
     SELECT m.id, m.title, m.embedding::text AS embedding,
-           1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector) AS similarity
+           1 - (m.embedding <=> $1::vector) AS similarity
     FROM memories m
-    WHERE m.organization_id = '${organizationId}'
-      AND m.type = '${type}'
+    WHERE m.organization_id = $2::uuid
+      AND m.type = $3
       AND m.status NOT IN ('rejected', 'superseded', 'deprecated')
-      ${ownerClause}
+      AND ($4::text IS NULL OR m.employee_id = $4::uuid OR m.employee_id IS NULL)
       AND m.embedding IS NOT NULL
-    ORDER BY m.embedding <=> '${toPgVectorLiteral(vector)}'::vector
+    ORDER BY m.embedding <=> $5::vector
     LIMIT 5
-  `)
+  `, [toPgVectorLiteral(vector), organizationId, type, employeeId ?? null, toPgVectorLiteral(vector)])
 
   let best: DedupVerdict = { similarity: 0, action: 'create' }
   for (const c of candidates) {
@@ -199,14 +196,12 @@ async function checkDeduplication(
   }
   // Same-title exact match (LLM re-extraction) counts as duplicate regardless of vector.
   const exact = await dbh.query<{ id: string }>(
-    `SELECT id FROM memories WHERE organization_id = '${organizationId}' AND type = '${type}' AND lower(title) = ${quote(title.toLowerCase())} ${ownerClause.replace(/m\./g, '')} LIMIT 1`,
+    `SELECT id FROM memories WHERE organization_id = $1::uuid AND type = $2 AND lower(title) = $3
+       AND ($4::text IS NULL OR employee_id = $4::uuid OR employee_id IS NULL) LIMIT 1`,
+    [organizationId, type, title.toLowerCase(), employeeId ?? null],
   )
   if (exact[0]) return { duplicateOfId: exact[0].id, similarity: 1, action: 'confirm' }
   return best
-}
-
-function quote(s: string): string {
-  return `'${s.replace(/'/g, "''")}'`
 }
 
 /** Updates a memory — writes a new version, never overwrites history. */
@@ -218,7 +213,7 @@ export async function updateMemory(
   changeReason: string,
 ) {
   const rows = await dbh.query<{ id: string; version: number; title: string; content: string; status: string; confidence: number; importance: number }>(
-    `SELECT id, version, title, content, status, confidence, importance FROM memories WHERE id = '${memoryId}'`,
+    `SELECT id, version, title, content, status, confidence, importance FROM memories WHERE id = $1::uuid`, [memoryId],
   )
   const existing = rows[0]
   if (!existing) return null
@@ -272,7 +267,7 @@ export async function updateMemory(
       id: string; type: string; title: string; content: string; scope: string; status: string;
       confidence: number; employee_id: string | null; role_id: string | null; department_id: string | null;
       organization_id: string;
-    }>(`SELECT * FROM memories WHERE id = '${memoryId}'`)
+    }>(`SELECT * FROM memories WHERE id = $1::uuid`, [memoryId])
     const after = rowsAfter[0]
     if (after) {
       const { syncMemoryToProvider } = await import('../memory/index.js')
@@ -284,7 +279,7 @@ export async function updateMemory(
     }
   }
 
-  const updated = await dbh.query(`SELECT * FROM memories WHERE id = '${memoryId}'`)
+  const updated = await dbh.query(`SELECT * FROM memories WHERE id = $1::uuid`, [memoryId])
   return updated[0]
 }
 
@@ -296,7 +291,7 @@ export async function promoteToRole(
   changedBy: string,
 ) {
   const rows = await dbh.query<{ scope: string; role_id: string | null; type: string; title: string; content: string }>(
-    `SELECT scope, role_id, type, title, content FROM memories WHERE id = '${memoryId}'`,
+    `SELECT scope, role_id, type, title, content FROM memories WHERE id = $1::uuid`, [memoryId],
   )
   const m = rows[0]
   if (!m) return null

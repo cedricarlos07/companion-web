@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cx } from '@/utils/cx'
 import { HugeIcon } from '@/components/ui/huge-icon'
@@ -20,6 +20,7 @@ import {
   Search01Icon,
 } from '@/lib/icons'
 import { useAppStore } from '@/store/app-store'
+import { api } from '@/services/api'
 import { ThemeToggle } from '@/components/common/theme-toggle'
 import type { AppNotification } from '@/types'
 
@@ -33,12 +34,81 @@ const CATEGORY_META: Record<
   security: { label: 'Sécurité', icon: Shield01Icon },
 }
 
+interface RealNotification extends AppNotification {
+  href?: string
+}
+
+/** Notifications réelles : approbations en attente, contradictions, sécurité.
+ *  Le « lu » est local à la session (aucun faux état persisté). */
+function useRealNotifications(): {
+  items: RealNotification[]
+  dismissed: Set<string>
+  dismiss: (id: string) => void
+} {
+  const [items, setItems] = useState<RealNotification[]>([])
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+
+  const load = useCallback(async () => {
+    const next: RealNotification[] = []
+    const [approvals, contradicted, security] = await Promise.all([
+      api.request<{ approvals: { id: string; action: string; agent_name: string | null }[] }>('/approvals?status=pending'),
+      api.request<{ memories: { id: string; title: string }[] }>('/memories?status=contradicted'),
+      api.securityCheck().catch(() => null),
+    ])
+    for (const a of approvals?.approvals ?? []) {
+      next.push({
+        id: `approval-${a.id}`,
+        category: 'attention',
+        title: 'Approbation en attente',
+        detail: a.action,
+        time: '',
+        read: false,
+        href: '/approvals',
+      })
+    }
+    for (const m of contradicted?.memories ?? []) {
+      next.push({
+        id: `memory-${m.id}`,
+        category: 'knowledge',
+        title: 'Connaissance contradictoire',
+        detail: m.title,
+        time: '',
+        read: false,
+        href: `/brain/${m.id}`,
+      })
+    }
+    if (security && !security.ok) {
+      next.push({
+        id: 'security-check',
+        category: 'security',
+        title: `${security.issues.length} problème(s) de sécurité d'instance`,
+        detail: security.issues[0] ?? '',
+        time: '',
+        read: false,
+        href: '/settings',
+      })
+    }
+    setItems(next)
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const dismiss = useCallback((id: string) => {
+    setDismissed((s) => new Set(s).add(id))
+  }, [])
+
+  return { items, dismissed, dismiss }
+}
+
 /** Top context bar: search, date, notifications popover, add source. */
 export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const [notifOpen, setNotifOpen] = useState(false)
-  const { notifications, dismissNotification, pushToast } = useAppStore()
+  const { pushToast } = useAppStore()
   const navigate = useNavigate()
-  const unread = notifications.filter((n) => !n.read).length
+  const { items, dismissed, dismiss } = useRealNotifications()
+  const unread = items.filter((n) => !dismissed.has(n.id)).length
 
   const today = new Intl.DateTimeFormat('fr-FR', {
     weekday: 'long',
@@ -102,10 +172,11 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         )}
         {notifOpen && (
           <NotificationPopover
+            items={items.filter((n) => !dismissed.has(n.id))}
             onClose={() => setNotifOpen(false)}
             onDismiss={(id) => {
-              dismissNotification(id)
-              pushToast('Notification supprimée.', 'info')
+              dismiss(id)
+              pushToast('Notification masquée pour cette session.', 'info')
             }}
           />
         )}
@@ -115,13 +186,14 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
 }
 
 function NotificationPopover({
+  items,
   onClose,
   onDismiss,
 }: {
+  items: RealNotification[]
   onClose: () => void
   onDismiss: (id: string) => void
 }) {
-  const { notifications } = useAppStore()
   const navigate = useNavigate()
   const [filter, setFilter] = useState<'all' | AppNotification['category']>('all')
 
@@ -133,7 +205,7 @@ function NotificationPopover({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const list = filter === 'all' ? notifications : notifications.filter((n) => n.category === filter)
+  const list = filter === 'all' ? items : items.filter((n) => n.category === filter)
 
   return (
     <>

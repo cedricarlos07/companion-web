@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import fs from 'node:fs'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { DbHandle } from './db/client.js'
 import { documents, sources, memories, employees, roles, departments, memoryVersions, memorySources, onboardings, users, handovers } from './db/schema.js'
 import { authenticate, issueToken, setAuthCookie, clearAuthCookie, authRequired, requireRole } from './auth.js'
@@ -10,6 +10,7 @@ import { ingestDocument, extractTextFromFile, storagePathFor } from './services/
 import { askCompanion } from './services/ask.js'
 import { createMemory, updateMemory, promoteToRole } from './services/memory.js'
 import { orgRiskOverview, computeEmployeeRisk, computeRoleRisk } from './services/risk.js'
+import { licenseGate } from './services/license-mode.js'
 import { startHandover, answerInterviewQuestion, generateHandoverPack } from './services/handover.js'
 import { generateOnboarding } from './services/onboarding.js'
 import { ollamaStatus } from './providers/ollama.js'
@@ -43,9 +44,9 @@ export function buildApiRouter(dbh: DbHandle): Router {
   })
 
   api.get('/auth/me', authRequired(dbh), async (req, res) => {
-    const rows = await dbh.query<{ id: string; email: string; name: string; app_role: string; organization_id: string; employee_id: string | null; org_name: string; instance_url: string | null }>(
-      `SELECT u.id, u.email, u.name, u.app_role, u.organization_id, u.employee_id, o.name AS org_name, o.instance_url
-       FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = '${req.user!.id}'`,
+    const rows = await dbh.query<{ id: string; email: string; name: string; app_role: string; organization_id: string; employee_id: string | null; org_name: string; instance_url: string | null; sector: string | null; country: string | null }>(
+      `SELECT u.id, u.email, u.name, u.app_role, u.organization_id, u.employee_id, o.name AS org_name, o.instance_url, o.sector, o.country
+       FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = $1`, [req.user!.id],
     )
     if (!rows[0]) return res.status(401).json({ error: 'compte introuvable' })
     res.json({ user: rows[0] })
@@ -109,9 +110,9 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM employees e
       LEFT JOIN roles r ON r.id = e.role_id
       LEFT JOIN departments d ON d.id = e.department_id
-      WHERE e.organization_id = '${req.user!.organizationId}'
+      WHERE e.organization_id = $1::uuid
       ORDER BY e.first_name
-    `)
+    `, [req.user!.organizationId])
     res.json({ employees: rows })
   })
 
@@ -164,11 +165,11 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM employees e
       LEFT JOIN roles r ON r.id = e.role_id
       LEFT JOIN departments d ON d.id = e.department_id
-      WHERE e.id = '${id}'
-    `)
+      WHERE e.id = $1
+    `, [id])
     if (!emp[0]) return res.status(404).json({ error: 'employé introuvable' })
 
-    const mems = await dbh.query(`SELECT id, type, title, content, scope, status, confidence, importance, contributor, updated_at::text AS updated_at FROM memories WHERE employee_id = '${id}' AND status NOT IN ('rejected','superseded') ORDER BY importance DESC, updated_at DESC`)
+    const mems = await dbh.query(`SELECT id, type, title, content, scope, status, confidence, importance, contributor, updated_at::text AS updated_at FROM memories WHERE employee_id = $1::uuid AND status NOT IN ('rejected','superseded') ORDER BY importance DESC, updated_at DESC`, [id])
     const uniques = mems.filter((m: Record<string, unknown>) =>
       ['procedure', 'decision', 'relationship'].includes(String(m.type)))
     const risk = await computeEmployeeRisk(dbh, req.user!.organizationId, id)
@@ -180,7 +181,12 @@ export function buildApiRouter(dbh: DbHandle): Router {
     if (!['active', 'leaving', 'onboarding', 'former'].includes(status)) {
       return res.status(400).json({ error: 'statut invalide' })
     }
-    await dbh.db.update(employees).set({ status }).where(eq(employees.id, String(req.params.id)))
+    const updated = await dbh.db
+      .update(employees)
+      .set({ status })
+      .where(and(eq(employees.id, String(req.params.id)), eq(employees.organizationId, req.user!.organizationId)))
+      .returning({ id: employees.id })
+    if (updated.length === 0) return res.status(404).json({ error: 'employé introuvable' })
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'employee.status_changed', targetType: 'employee', targetId: String(req.params.id),
       detail: { status },
@@ -201,26 +207,50 @@ export function buildApiRouter(dbh: DbHandle): Router {
              COALESCE((SELECT round(100.0 * count(*) FILTER (WHERE m.scope = 'role') / GREATEST(count(*), 1))
                FROM memories m WHERE m.role_id = r.id AND m.status NOT IN ('rejected','superseded')), 0)::int AS coverage
       FROM roles r LEFT JOIN departments d ON d.id = r.department_id
-      WHERE r.organization_id = '${req.user!.organizationId}'
+      WHERE r.organization_id = $1::uuid
       ORDER BY r.title
-    `)
+    `, [req.user!.organizationId])
     res.json({ roles: rows })
   })
 
   api.get('/roles/:id', authRequired(dbh), async (req, res) => {
     const id = String(req.params.id)
-    const role = await dbh.query(`SELECT r.id, r.title, d.name AS department FROM roles r LEFT JOIN departments d ON d.id = r.department_id WHERE r.id = '${id}'`)
+    const role = await dbh.query(
+      `SELECT r.id, r.title, d.name AS department, r.coverage_target
+       FROM roles r LEFT JOIN departments d ON d.id = r.department_id
+       WHERE r.id = $1 AND r.organization_id = $2::uuid`,
+      [id, req.user!.organizationId],
+    )
     if (!role[0]) return res.status(404).json({ error: 'rôle introuvable' })
-    const mems = await dbh.query(`SELECT id, type, title, content, scope, status, confidence, importance, contributor, employee_id, updated_at::text AS updated_at FROM memories WHERE role_id = '${id}' AND status NOT IN ('rejected','superseded') ORDER BY importance DESC`)
+    const mems = await dbh.query(`SELECT id, type, title, content, scope, status, confidence, importance, contributor, employee_id, updated_at::text AS updated_at FROM memories WHERE role_id = $1::uuid AND status NOT IN ('rejected','superseded') ORDER BY importance DESC`, [id])
     const contributors = await dbh.query(`
       SELECT contributor AS name, count(*)::int AS contributions,
              min(created_at::text) AS from, max(updated_at::text) AS to,
-             max(employee_id) AS employee_id
-      FROM memories WHERE role_id = '${id}' AND contributor IS NOT NULL
+             max(employee_id::text) AS employee_id
+      FROM memories WHERE role_id = $1::uuid AND contributor IS NOT NULL
       GROUP BY contributor ORDER BY count(*) DESC LIMIT 10
-    `)
+    `, [id])
     const risk = await computeRoleRisk(dbh, req.user!.organizationId, id)
     res.json({ role: role[0], memories: mems, contributors, risk })
+  })
+
+  api.post('/roles/:id/coverage-target', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { coverageTarget } = req.body as { coverageTarget?: number }
+    const value = Math.floor(Number(coverageTarget))
+    if (!Number.isFinite(value) || value < 30 || value > 100) {
+      return res.status(400).json({ error: 'coverageTarget doit être un entier entre 30 et 100' })
+    }
+    const updated = await dbh.db
+      .update(roles)
+      .set({ coverageTarget: value })
+      .where(and(eq(roles.id, String(req.params.id)), eq(roles.organizationId, req.user!.organizationId)))
+      .returning({ id: roles.id })
+    if (updated.length === 0) return res.status(404).json({ error: 'rôle introuvable' })
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'role.coverage_target_changed', targetType: 'role', targetId: String(req.params.id),
+      detail: { coverageTarget: value },
+    })
+    res.json({ ok: true, coverageTarget: value })
   })
 
   api.post('/memories/:id/promote', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
@@ -238,14 +268,14 @@ export function buildApiRouter(dbh: DbHandle): Router {
   /* ------------------------------ Sources -------------------------------- */
 
   api.get('/sources', authRequired(dbh), async (req, res) => {
-    const srcs = await dbh.query(`SELECT * FROM sources WHERE organization_id = '${req.user!.organizationId}' ORDER BY created_at DESC`)
+    const srcs = await dbh.query(`SELECT * FROM sources WHERE organization_id = $1::uuid ORDER BY created_at DESC`, [req.user!.organizationId])
     const docs = await dbh.query(`
       SELECT d.id, d.title, d.mime_type, d.size_bytes, d.status, d.status_detail, d.uploaded_at::text AS uploaded_at,
              s.name AS source_name
       FROM documents d LEFT JOIN sources s ON s.id = d.source_id
-      WHERE d.organization_id = '${req.user!.organizationId}'
+      WHERE d.organization_id = $1::uuid
       ORDER BY d.uploaded_at DESC LIMIT 30
-    `)
+    `, [req.user!.organizationId])
     res.json({ sources: srcs, documents: docs })
   })
 
@@ -332,7 +362,10 @@ export function buildApiRouter(dbh: DbHandle): Router {
   )
 
   api.get('/documents/:id', authRequired(dbh), async (req, res) => {
-    const rows = await dbh.query(`SELECT id, title, status, status_detail, mime_type, size_bytes, uploaded_at::text AS uploaded_at FROM documents WHERE id = '${String(req.params.id)}'`)
+    const rows = await dbh.query(
+      `SELECT id, title, status, status_detail, mime_type, size_bytes, uploaded_at::text AS uploaded_at FROM documents WHERE id = $1::uuid`,
+      [String(req.params.id)],
+    )
     if (!rows[0]) return res.status(404).json({ error: 'document introuvable' })
     res.json({ document: rows[0] })
   })
@@ -341,13 +374,6 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   api.get('/memories', authRequired(dbh), async (req, res) => {
     const { type, status, q, employeeId, roleId, scope } = req.query as Record<string, string | undefined>
-    const clauses = [`m.organization_id = '${req.user!.organizationId}'`, `m.status NOT IN ('rejected','superseded')`]
-    if (type) clauses.push(`m.type = '${type}'`)
-    if (status) clauses.push(`m.status = '${status}'`)
-    if (scope) clauses.push(`m.scope = '${scope}'`)
-    if (employeeId) clauses.push(`m.employee_id = '${employeeId}'`)
-    if (roleId) clauses.push(`m.role_id = '${roleId}'`)
-    if (q) clauses.push(`(m.title ILIKE '%${q.replace(/'/g, "''")}%' OR m.content ILIKE '%${q.replace(/'/g, "''")}%')`)
     const rows = await dbh.query(`
       SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
              m.contributor, m.employee_id, m.role_id, m.version, m.origin, m.human_validated,
@@ -357,10 +383,17 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM memories m
       LEFT JOIN employees e ON e.id = m.employee_id
       LEFT JOIN roles r ON r.id = m.role_id
-      WHERE ${clauses.join(' AND ')}
+      WHERE m.organization_id = $1::uuid
+        AND m.status NOT IN ('rejected','superseded')
+        AND ($2::text IS NULL OR m.type = $2)
+        AND ($3::text IS NULL OR m.status = $3)
+        AND ($4::text IS NULL OR m.scope = $4)
+        AND ($5::text IS NULL OR m.employee_id = $5::uuid)
+        AND ($6::text IS NULL OR m.role_id = $6::uuid)
+        AND ($7::text IS NULL OR m.title ILIKE $7 OR m.content ILIKE $7)
       ORDER BY m.updated_at DESC
       LIMIT 200
-    `)
+    `, [req.user!.organizationId, type ?? null, status ?? null, scope ?? null, employeeId ?? null, roleId ?? null, q ? `%${q}%` : null])
     res.json({ memories: rows })
   })
 
@@ -372,20 +405,20 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM memories m
       LEFT JOIN employees e ON e.id = m.employee_id
       LEFT JOIN roles r ON r.id = m.role_id
-      WHERE m.id = '${id}'
-    `)
+      WHERE m.id = $1
+    `, [id])
     if (!rows[0]) return res.status(404).json({ error: 'mémoire introuvable' })
     const evidence = await dbh.query(`
       SELECT ms.excerpt, ms.location, d.title AS document_title, d.id AS document_id, d.mime_type
       FROM memory_sources ms LEFT JOIN documents d ON d.id = ms.document_id
-      WHERE ms.memory_id = '${id}'
-    `)
-    const versions = await dbh.query(`SELECT version, title, content, status, confidence, importance, changed_by, change_reason, created_at::text AS created_at FROM memory_versions WHERE memory_id = '${id}' ORDER BY version DESC`)
+      WHERE ms.memory_id = $1::uuid
+    `, [id])
+    const versions = await dbh.query(`SELECT version, title, content, status, confidence, importance, changed_by, change_reason, created_at::text AS created_at FROM memory_versions WHERE memory_id = $1::uuid ORDER BY version DESC`, [id])
     const related = await dbh.query(`
       SELECT m2.id, m2.title, m2.type, ml.kind
-      FROM memory_links ml JOIN memories m2 ON m2.id = CASE WHEN ml.from_memory_id = '${id}' THEN ml.to_memory_id ELSE ml.from_memory_id END
-      WHERE ml.from_memory_id = '${id}' OR ml.to_memory_id = '${id}'
-    `)
+      FROM memory_links ml JOIN memories m2 ON m2.id = CASE WHEN ml.from_memory_id = $1::uuid THEN ml.to_memory_id ELSE ml.from_memory_id END
+      WHERE ml.from_memory_id = $2::uuid OR ml.to_memory_id = $3::uuid
+    `, [id, id, id])
     res.json({ memory: rows[0], evidence, versions, related })
   })
 
@@ -448,14 +481,18 @@ export function buildApiRouter(dbh: DbHandle): Router {
   api.get('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
     const rows = await dbh.query(
       `SELECT i.id, i.email, i.role, i.status, i.expires_at::text AS expires_at, i.invited_by_name
-       FROM invitations i WHERE i.organization_id = '${req.user!.organizationId}' ORDER BY i.created_at DESC`,
+       FROM invitations i WHERE i.organization_id = $1::uuid ORDER BY i.created_at DESC`, [req.user!.organizationId],
     )
     res.json({ invitations: rows })
   })
 
-  api.post('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+  api.post('/invitations', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
     const { email, role } = req.body as { email?: string; role?: string }
     if (!email || !role) return res.status(400).json({ error: 'email et role requis' })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'adresse email invalide' })
+    if (!['employee', 'manager', 'admin', 'auditor'].includes(role)) {
+      return res.status(400).json({ error: 'rôle invalide — employee, manager, admin ou auditor' })
+    }
     const { createInvitation } = await import('./services/auth-completion.js')
     const result = await createInvitation(dbh, req.user!.organizationId, email, role, req.user!.id, req.user!.name)
     await audit(dbh, req.user!.organizationId, {
@@ -532,13 +569,128 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   api.get('/entitlements', authRequired(dbh), async (req, res) => {
     const { getEntitlements } = await import('./services/entitlements.js')
-    res.json({ entitlements: await getEntitlements(dbh, req.user!.organizationId) })
+    const planRows = await dbh
+      .query<{ plan: string }>(`SELECT plan FROM org_entitlements WHERE organization_id = $1::uuid`, [req.user!.organizationId])
+      .catch(() => [])
+    res.json({
+      entitlements: await getEntitlements(dbh, req.user!.organizationId),
+      plan: planRows[0]?.plan ?? 'pilot',
+    })
   })
 
   api.get('/license', authRequired(dbh), async (req, res) => {
     const { checkLicenseStatus } = await import('./services/licenses.js')
+    const { getLicenseMode, getInstanceId } = await import('./services/license-mode.js')
     const license = await checkLicenseStatus(dbh, req.user!.organizationId)
-    res.json(license)
+    const mode = await getLicenseMode(dbh, req.user!.organizationId)
+    const instanceId = await getInstanceId(dbh, req.user!.organizationId)
+    res.json({
+      ...license,
+      mode: mode.mode,
+      plan: mode.plan,
+      licenseId: mode.licenseId,
+      expiresAt: mode.expiresAt,
+      graceUntil: mode.graceUntil,
+      daysLeft: mode.daysLeft,
+      message: mode.message,
+      instanceId,
+      licensing: mode.licensing,
+      lease: mode.lease,
+      lastHeartbeatAt: mode.lastHeartbeatAt,
+    })
+  })
+
+  /* Import d'une licence .lic signée par Kamaloka (offline) — owner uniquement. */
+  api.post('/license/import', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    const { license } = req.body as { license?: string }
+    if (!license) return res.status(400).json({ error: 'contenu de licence requis (fichier .lic)' })
+    const { verifyLicense } = await import('./services/licenses.js')
+    const verification = verifyLicense(license)
+    if (verification.status === 'invalid' || verification.status === 'not_configured' || !verification.payload) {
+      return res.status(400).json({ error: verification.error ?? 'licence invalide' })
+    }
+    const payload = verification.payload
+    const existing = await dbh
+      .query<{ id: string }>(
+        `SELECT id FROM licenses WHERE license_key_hash = $1 AND organization_id = $2::uuid ORDER BY created_at DESC LIMIT 1`,
+        [payload.licenseId, req.user!.organizationId],
+      )
+      .catch(() => [])
+
+    const GRACE_DAYS = Math.max(0, Number(process.env.LICENSE_GRACE_DAYS ?? 30))
+    const graceUntil = payload.expiresAt
+      ? new Date(new Date(payload.expiresAt).getTime() + GRACE_DAYS * 86_400_000).toISOString()
+      : null
+    // Toutes les autres lignes passent en 'replaced' — une seule licence active à la fois.
+    await dbh.exec(`UPDATE licenses SET status = 'replaced' WHERE organization_id = $1::uuid`, [req.user!.organizationId])
+    if (existing[0]) {
+      // Ré-import / renouvellement d'une même licence : mise à jour de la ligne existante.
+      await dbh.exec(
+        `UPDATE licenses SET status = 'active', plan = $1,
+         entitlements = $2::jsonb,
+         expires_at = $3, grace_until = $4,
+         signature = $5
+         WHERE id = $6::uuid`,
+        [payload.plan, JSON.stringify(payload.entitlements ?? {}), payload.expiresAt ?? null, graceUntil, license, existing[0].id],
+      )
+    } else {
+      await dbh.exec(
+        `INSERT INTO licenses (organization_id, license_key_hash, plan, status, entitlements, issued_at, expires_at, grace_until, signature)
+         VALUES ($1, $2, $3, 'active', $4::jsonb, $5, $6, $7, $8)`,
+        [req.user!.organizationId, payload.licenseId, payload.plan, JSON.stringify(payload.entitlements ?? {}), payload.issuedAt, payload.expiresAt ?? null, graceUntil, license],
+      )
+    }
+    // La licence active le plan : les limites d'entitlements suivent automatiquement.
+    await dbh.exec(
+      `INSERT INTO org_entitlements (organization_id, plan) VALUES ($1, $2)
+       ON CONFLICT (organization_id) DO UPDATE SET plan = $3, updated_at = now()`, [req.user!.organizationId, payload.plan, payload.plan],
+    )
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'license.imported', targetType: 'license', targetId: payload.licenseId,
+      detail: { plan: payload.plan, expiresAt: payload.expiresAt },
+    })
+    res.json({ ok: true, plan: payload.plan, licenseId: payload.licenseId, expiresAt: payload.expiresAt, graceUntil })
+  })
+
+  /* Retire la licence installée (retour à l'essai) — owner uniquement. */
+  api.delete('/license', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    await dbh.exec(`UPDATE licenses SET status = 'revoked' WHERE organization_id = $1::uuid`, [req.user!.organizationId])
+    await dbh.exec(`UPDATE org_entitlements SET plan = 'pilot', updated_at = now() WHERE organization_id = $1::uuid`, [req.user!.organizationId])
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'license.removed', targetType: 'license', targetId: req.user!.organizationId, detail: {},
+    })
+    res.json({ ok: true })
+  })
+
+  /* Signature de test avec la paire éphémère de dev — 404 en production.
+   * Signe licences (payload nu) et leases (kind: 'companion-lease'). */
+  api.post('/license/dev-sign', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not found' })
+    const { devSignLicense, devSignLease } = await import('./services/licenses.js')
+    const body = req.body as Record<string, unknown>
+    try {
+      if (body?.kind === 'companion-lease') {
+        return res.json({ lease: devSignLease(body as unknown as Parameters<typeof devSignLease>[0]) })
+      }
+      res.json({ license: devSignLicense(body as unknown as Parameters<typeof devSignLicense>[0]) })
+    } catch (err) {
+      res.status(400).json({ error: String(err).slice(0, 200) })
+    }
+  })
+
+  /* Simule une réponse de heartbeat du Control Center ({status, lease}) :
+   * vérifie et stocke le lease exactement comme le ferait le vrai cycle —
+   * dev uniquement (404 en production). */
+  api.post('/license/dev-lease', authRequired(dbh), requireRole('owner'), async (req, res) => {
+    if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not found' })
+    const { storeLeaseFromResponse } = await import('./services/license-mode.js')
+    const body = req.body as { status?: string; lease?: string }
+    res.json(await storeLeaseFromResponse(dbh, req.user!.organizationId, body))
+  })
+
+  api.get('/billing/usage', authRequired(dbh), async (req, res) => {
+    const { getUsageReport } = await import('./services/billing.js')
+    res.json({ usage: await getUsageReport(dbh, req.user!.organizationId) })
   })
 
   /* -------------------------------- Ask ----------------------------------- */
@@ -552,7 +704,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
     let employeeIdResolved: string | undefined = employeeId
     if (req.user!.appRole === 'employee' && req.user!.employeeId) {
       employeeIdResolved = employeeIdResolved ?? req.user!.employeeId ?? undefined
-      const emp = await dbh.query<{ department_id: string | null }>(`SELECT department_id FROM employees WHERE id = '${req.user!.employeeId}'`)
+      const emp = await dbh.query<{ department_id: string | null }>(`SELECT department_id FROM employees WHERE id = $1::uuid`, [req.user!.employeeId])
       departmentIdResolved = departmentIdResolved ?? emp[0]?.department_id ?? undefined
     }
 
@@ -580,6 +732,26 @@ export function buildApiRouter(dbh: DbHandle): Router {
     const providerHealth = await provider.health()
     const ai = await checkAiHealth(dbh, req.user!.organizationId)
     res.json({ engine: memorySearchEngine(), provider: providerHealth, ai })
+  })
+
+  /* Vérification de mise à jour — informatif uniquement, jamais appliquée automatiquement. */
+  api.get('/system/update-check', authRequired(dbh), async (_req, res) => {
+    const updateServer = (process.env.LICENSE_SERVER_URL ?? process.env.UPDATE_SERVER_URL ?? '').replace(/\/$/, '')
+    if (!updateServer) return res.json({ available: false, reason: 'aucun serveur de mise à jour configuré' })
+    try {
+      const r = await fetch(`${updateServer}/releases/latest`, { signal: AbortSignal.timeout(5000) })
+      if (!r.ok) return res.json({ available: false, reason: `réponse ${r.status}` })
+      const data = (await r.json()) as { version?: string; channel?: string }
+      const installed = '1.0.0'
+      res.json({
+        available: Boolean(data.version && data.version !== installed),
+        installed,
+        latest: data.version ?? null,
+        channel: data.channel ?? 'stable',
+      })
+    } catch (err) {
+      res.json({ available: false, reason: String(err).slice(0, 120) })
+    }
   })
 
   api.get('/system/ai/settings', authRequired(dbh), async (req, res) => {
@@ -625,9 +797,9 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM handovers h
       JOIN employees e ON e.id = h.employee_id
       LEFT JOIN roles r ON r.id = h.role_id
-      WHERE h.organization_id = '${req.user!.organizationId}'
+      WHERE h.organization_id = $1::uuid
       ORDER BY h.created_at DESC
-    `)
+    `, [req.user!.organizationId])
     res.json({ handovers: rows })
   })
 
@@ -648,8 +820,8 @@ export function buildApiRouter(dbh: DbHandle): Router {
       JOIN employees e ON e.id = h.employee_id
       LEFT JOIN roles r ON r.id = h.role_id
       LEFT JOIN employees s ON s.id = h.successor_employee_id
-      WHERE h.id = '${id}'
-    `)
+      WHERE h.id = $1
+    `, [id])
     if (!rows[0]) return res.status(404).json({ error: 'handover introuvable' })
     const gaps = await dbh.query(`
       SELECT g.id, g.kind, g.question, g.detail, g.status,
@@ -658,12 +830,12 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM handover_gaps g
       LEFT JOIN handover_answers ha ON ha.gap_id = g.id
       LEFT JOIN interview_questions iq ON iq.gap_id = g.id
-      WHERE g.handover_id = '${id}'
+      WHERE g.handover_id = $1::uuid
       ORDER BY COALESCE(iq.order_index, 99), g.created_at
-    `)
+    `, [id])
     const uniqueKnowledge = await dbh.query(`
       SELECT m.id, m.title, m.type, m.confidence FROM memories m
-      WHERE m.employee_id = (SELECT employee_id FROM handovers WHERE id = '${id}')
+      WHERE m.employee_id = (SELECT employee_id FROM handovers WHERE id = $1::uuid)
         AND m.type IN ('procedure','decision','relationship','lesson')
         AND m.status NOT IN ('rejected','superseded')
         AND NOT EXISTS (
@@ -671,7 +843,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
             AND m2.type = m.type AND m2.title = m.title AND m2.employee_id <> m.employee_id
         )
       ORDER BY m.importance DESC LIMIT 20
-    `)
+    `, [id])
     res.json({ handover: rows[0], gaps, uniqueKnowledge })
   })
 
@@ -709,9 +881,9 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM onboardings o
       JOIN employees e ON e.id = o.employee_id
       LEFT JOIN roles r ON r.id = o.role_id
-      WHERE o.organization_id = '${req.user!.organizationId}'
+      WHERE o.organization_id = $1::uuid
       ORDER BY o.created_at DESC
-    `)
+    `, [req.user!.organizationId])
     res.json({ onboardings: rows })
   })
 
@@ -728,10 +900,47 @@ export function buildApiRouter(dbh: DbHandle): Router {
       FROM onboardings o
       JOIN employees e ON e.id = o.employee_id
       LEFT JOIN roles r ON r.id = o.role_id
-      WHERE o.id = '${String(req.params.id)}'
-    `)
+      WHERE o.id = $1
+    `, [String(req.params.id)])
     if (!rows[0]) return res.status(404).json({ error: 'onboarding introuvable' })
     res.json({ onboarding: rows[0] })
+  })
+
+  /* Progression onboarding persistée — l'employé concerné peut cocher ses
+   * propres étapes, les managers/admin aussi (audit dans les deux cas). */
+  api.post('/onboardings/:id/progress', authRequired(dbh), async (req, res) => {
+    const { key, done } = req.body as { key?: string; done?: boolean }
+    if (!key || typeof done !== 'boolean') return res.status(400).json({ error: 'key et done (booléen) requis' })
+    const rows = await dbh.query<{ id: string; organization_id: string; employee_id: string }>(
+      `SELECT id, organization_id, employee_id FROM onboardings WHERE id = $1::uuid`, [String(req.params.id)],
+    )
+    const onboarding = rows[0]
+    if (!onboarding) return res.status(404).json({ error: 'onboarding introuvable' })
+    if (onboarding.organization_id !== req.user!.organizationId) {
+      return res.status(404).json({ error: 'onboarding introuvable' })
+    }
+    const isOwnerEmployee = req.user!.employeeId === onboarding.employee_id
+    const privileged = ['owner', 'admin', 'manager'].includes(req.user!.appRole)
+    if (!isOwnerEmployee && !privileged) {
+      return res.status(403).json({ error: 'seul l\'employé concerné ou un manager peut modifier la progression' })
+    }
+    const planRows = await dbh.query<{ plan: Record<string, unknown> }>(
+      `SELECT plan FROM onboardings WHERE id = $1::uuid`, [String(req.params.id)],
+    )
+    const plan = planRows[0]?.plan ?? {}
+    const doneItems: string[] = Array.isArray(plan.doneItems) ? (plan.doneItems as string[]) : []
+    const doneItemsNext = done
+      ? [...new Set([...doneItems, key])]
+      : doneItems.filter((k) => k !== key)
+    await dbh.db
+      .update(onboardings)
+      .set({ plan: { ...plan, doneItems: doneItemsNext } })
+      .where(eq(onboardings.id, String(req.params.id)))
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: done ? 'onboarding.step_done' : 'onboarding.step_undone',
+      targetType: 'onboarding', targetId: String(req.params.id), detail: { key },
+    })
+    res.json({ ok: true, doneItems: doneItemsNext })
   })
 
   /* ------------------------------- Overview -------------------------------- */
@@ -739,23 +948,23 @@ export function buildApiRouter(dbh: DbHandle): Router {
   api.get('/overview', authRequired(dbh), async (req, res) => {
     const org = req.user!.organizationId
     const stats = await dbh.query<{ memories: string; employees: string; roles: string; documents: string; handovers: string }>(`
-      SELECT (SELECT count(*) FROM memories WHERE organization_id = '${org}' AND status NOT IN ('rejected','superseded'))::text AS memories,
-             (SELECT count(*) FROM employees WHERE organization_id = '${org}' AND status <> 'former')::text AS employees,
-             (SELECT count(*) FROM roles WHERE organization_id = '${org}')::text AS roles,
-             (SELECT count(*) FROM documents WHERE organization_id = '${org}')::text AS documents,
-             (SELECT count(*) FROM handovers WHERE organization_id = '${org}')::text AS handovers
-    `)
+      SELECT (SELECT count(*) FROM memories WHERE organization_id = $1::uuid AND status NOT IN ('rejected','superseded'))::text AS memories,
+             (SELECT count(*) FROM employees WHERE organization_id = $2::uuid AND status <> 'former')::text AS employees,
+             (SELECT count(*) FROM roles WHERE organization_id = $3::uuid)::text AS roles,
+             (SELECT count(*) FROM documents WHERE organization_id = $4::uuid)::text AS documents,
+             (SELECT count(*) FROM handovers WHERE organization_id = $5::uuid)::text AS handovers
+    `, [org, org, org, org, org])
     const riskOverview = await orgRiskOverview(dbh, org)
     const recentMemories = await dbh.query(`
       SELECT m.id, m.type, m.title, m.confidence, m.status, m.updated_at::text AS updated_at, m.contributor
-      FROM memories m WHERE m.organization_id = '${org}' AND m.status NOT IN ('rejected','superseded')
+      FROM memories m WHERE m.organization_id = $1::uuid AND m.status NOT IN ('rejected','superseded')
       ORDER BY m.updated_at DESC LIMIT 8
-    `)
+    `, [org])
     const leaving = await dbh.query(`
       SELECT h.id, h.readiness, h.status, e.first_name || ' ' || e.last_name AS employee_name, r.title AS role_title
       FROM handovers h JOIN employees e ON e.id = h.employee_id LEFT JOIN roles r ON r.id = h.role_id
-      WHERE h.organization_id = '${org}' ORDER BY h.updated_at DESC LIMIT 3
-    `)
+      WHERE h.organization_id = $1::uuid ORDER BY h.updated_at DESC LIMIT 3
+    `, [org])
     res.json({
       stats: {
         memories: Number(stats[0]?.memories ?? 0),
@@ -780,15 +989,45 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   api.get('/audit', authRequired(dbh), async (req, res) => {
     const kind = req.query.kind as string | undefined
-    const where = kind && kind !== 'all'
-      ? `action LIKE '${kind}%'`
-      : 'true'
     const rows = await dbh.query(`
       SELECT id, actor_name, actor_kind, action, target_type, target_id, detail, created_at::text AS created_at
-      FROM audit_events WHERE organization_id = '${req.user!.organizationId}' AND ${where}
+      FROM audit_events WHERE organization_id = $1::uuid AND ($2::text IS NULL OR action LIKE $2::text || '%')
       ORDER BY created_at DESC LIMIT 100
-    `)
+    `, [req.user!.organizationId, kind && kind !== 'all' ? kind : null])
     res.json({ events: rows })
+  })
+
+  /* --------------------------- Comptes & organisation ----------------------- */
+
+  api.get('/users', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const rows = await dbh.query(
+      `SELECT u.id, u.email, u.name, u.app_role, u.active, u.last_active_at::text AS last_active_at, u.employee_id
+       FROM users u WHERE u.organization_id = $1::uuid ORDER BY u.created_at`, [req.user!.organizationId],
+    )
+    res.json({ users: rows })
+  })
+
+  api.post('/organizations/current', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { name, sector, country } = req.body as { name?: string; sector?: string; country?: string }
+    const trimmedName = (name ?? '').trim()
+    if (trimmedName.length < 2) return res.status(400).json({ error: 'nom requis (2 caractères minimum)' })
+    const current = (
+      await dbh.query<{ name: string; sector: string | null; country: string | null }>(
+        `SELECT name, sector, country FROM organizations WHERE id = $1::uuid`, [req.user!.organizationId],
+      )
+    )[0]
+    if (!current) return res.status(404).json({ error: 'organisation introuvable' })
+    const nextSector = sector === undefined ? current.sector : (sector.trim() || null)
+    const nextCountry = country === undefined ? current.country : (country.trim() || null)
+    await dbh.exec(
+      `UPDATE organizations SET name = $1, sector = $2, country = $3 WHERE id = $4::uuid`,
+      [trimmedName, nextSector, nextCountry, req.user!.organizationId],
+    )
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'org.updated', targetType: 'organization', targetId: req.user!.organizationId,
+      detail: { name: trimmedName, sector: nextSector, country: nextCountry },
+    })
+    res.json({ organization: { name: trimmedName, sector: nextSector, country: nextCountry } })
   })
 
   /* -------------------------------- Seed ----------------------------------- */

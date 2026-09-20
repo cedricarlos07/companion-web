@@ -17,6 +17,7 @@ export type MemoryStatus =
   | 'verified'
   | 'active'
   | 'conflicted'
+  | 'contradicted'
   | 'deprecated'
   | 'archived'
 

@@ -72,36 +72,56 @@ export async function askCompanion(
   engineOverride?: 'native' | 'mem0' | 'hybrid' | 'fusion',
 ): Promise<AskResult> {
   const { vector, provider: embedProvider } = await embed(question)
-  const accessClause = memoryAccessClause(actor ?? { kind: 'user', organizationId, appRole: 'owner' }, organizationId)
+  const access = memoryAccessClause(actor ?? { kind: 'user', organizationId, appRole: 'owner' }, organizationId, 2)
 
-  const filterClauses: string[] = [
-    `m.organization_id = '${organizationId}'`,
-    `m.status IN ('verified', 'active', 'candidate', 'contradicted')`,
-    accessClause,
-  ]
-  if (filters.type) filterClauses.push(`m.type = '${filters.type}'`)
-  if (filters.scope) filterClauses.push(`m.scope = '${filters.scope}'`)
-  if (filters.roleId) filterClauses.push(`(m.role_id = '${filters.roleId}' OR m.employee_id IN (SELECT id FROM employees WHERE role_id = '${filters.roleId}'))`)
-  if (filters.employeeId) filterClauses.push(`(m.employee_id = '${filters.employeeId}' OR m.contributor = (SELECT first_name || ' ' || last_name FROM employees WHERE id = '${filters.employeeId}'))`)
-  if (filters.departmentId) filterClauses.push(`m.department_id = '${filters.departmentId}'`)
+  // $1 = organisation, $2..N = clause d'accès, puis filtres optionnels nullables.
+  let n = 1 + access.params.length
+  // Filtres optionnels réutilisés par le path native ET l'hydratation Mem0 —
+  // les placeholders sont renumérotés selon la requête consommatrice.
+  const optSpecs: { clause: (i: number) => string; value: unknown }[] = []
+  if (filters.type) optSpecs.push({ clause: (i) => `m.type = $${i}::text`, value: filters.type })
+  if (filters.scope) optSpecs.push({ clause: (i) => `m.scope = $${i}::text`, value: filters.scope })
+  if (filters.roleId) optSpecs.push({ clause: (i) => `(m.role_id = $${i}::uuid OR m.employee_id IN (SELECT id FROM employees WHERE role_id = $${i}))`, value: filters.roleId })
+  if (filters.employeeId) optSpecs.push({ clause: (i) => `(m.employee_id = $${i}::uuid OR m.contributor = (SELECT first_name || ' ' || last_name FROM employees WHERE id = $${i}))`, value: filters.employeeId })
+  if (filters.departmentId) optSpecs.push({ clause: (i) => `m.department_id = $${i}::uuid`, value: filters.departmentId })
+  const optClauses: string[] = []
+  const optParams: unknown[] = []
+  for (const spec of optSpecs) {
+    n++
+    optClauses.push(spec.clause(n))
+    optParams.push(spec.value)
+  }
+  const whereAccess = {
+    text: [
+      `m.organization_id = $1::uuid`,
+      `m.status IN ('verified', 'active', 'candidate', 'contradicted')`,
+      access.text,
+      ...optClauses,
+    ].join('\n        AND '),
+    params: [organizationId, ...access.params, ...optParams],
+  }
 
   // ---- Retrieval : native (pgvector) ou Mem0 → hydratation → ranking Companion ----
   const engine = engineOverride ?? memorySearchEngine()
-  const fclause = filterClauses.join('\n        AND ')
+  const vecA = ++n
+  const likeA = ++n
+  const vecB = ++n
+  const likeB = ++n
+  const like = likePattern(question)
   const nativeRows = () =>
     dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
       WITH semantic AS (
-        SELECT m.id, 1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector) AS semantic
+        SELECT m.id, 1 - (m.embedding <=> $${vecA}::vector) AS semantic
         FROM memories m
-        WHERE ${fclause}
+        WHERE ${whereAccess.text}
           AND m.embedding IS NOT NULL
-        ORDER BY m.embedding <=> '${toPgVectorLiteral(vector)}'::vector
+        ORDER BY m.embedding <=> $${vecB}::vector
         LIMIT 40
       )
       SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
              m.contributor, m.updated_at::text AS updated_at,
              COALESCE(s.semantic, 0) AS semantic,
-             CASE WHEN m.title || ' ' || m.content ILIKE ${likePattern(question)} THEN 1 ELSE 0 END AS text_match,
+             CASE WHEN m.title || ' ' || m.content ILIKE $${likeA} THEN 1 ELSE 0 END AS text_match,
              (SELECT d.title FROM memory_sources ms JOIN documents d ON d.id = ms.document_id
               WHERE ms.memory_id = m.id AND d.title IS NOT NULL LIMIT 1) AS document_title,
              (SELECT ms.excerpt FROM memory_sources ms WHERE ms.memory_id = m.id LIMIT 1) AS excerpt
@@ -109,30 +129,52 @@ export async function askCompanion(
       JOIN semantic s ON s.id = m.id
       ORDER BY (
           COALESCE(s.semantic, 0) * 0.60
-        + (CASE WHEN m.title || ' ' || m.content ILIKE ${likePattern(question)} THEN 1 ELSE 0 END) * 0.20
+        + (CASE WHEN m.title || ' ' || m.content ILIKE $${likeB} THEN 1 ELSE 0 END) * 0.20
         + (m.importance / 100.0) * 0.12
         + (m.confidence / 100.0) * 0.08
       ) DESC
       LIMIT 8
-    `)
+    `, (() => {
+      const params: unknown[] = [...whereAccess.params]
+      params[vecA - 1] = toPgVectorLiteral(vector)
+      params[likeA - 1] = like
+      params[vecB - 1] = toPgVectorLiteral(vector)
+      params[likeB - 1] = like
+      return params
+    })())
 
   let rows: (ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number })[] = []
 
-  const hydrateByIds = async (ids: string[]) =>
-    ids.length === 0
-      ? []
-      : await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
+  const hydrateByIds = async (ids: string[]) => {
+    if (ids.length === 0) return []
+    const hydrateAccess = memoryAccessClause(actor ?? { kind: 'user', organizationId, appRole: 'owner' }, organizationId, 2)
+    const likeIdx = 2 + hydrateAccess.params.length
+    // Les filtres optionnels (périmètre employé/rôle/…) sont RÉAPPLIQUÉS ici :
+    // Mem0 ne connaît pas les filtres, l'hydratation SQL reste source de vérité.
+    let hn = likeIdx
+    const hOptClauses = optSpecs.map((spec) => {
+      hn++
+      return spec.clause(hn)
+    })
+    // Fragment au format SqlFragment (x.text) — contrat du gate SQL.
+    const hydrateOpt = {
+      text: hOptClauses.length > 0 ? ' AND ' + hOptClauses.join('\n            AND ') : '',
+      params: optSpecs.map((o) => o.value),
+    }
+    return await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
           SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
                  m.contributor, m.updated_at::text AS updated_at,
                  COALESCE(m.confidence / 100.0, 0) AS semantic,
-                 CASE WHEN m.title || ' ' || m.content ILIKE ${likePattern(question)} THEN 1 ELSE 0 END AS text_match,
+                 CASE WHEN m.title || ' ' || m.content ILIKE $${likeIdx} THEN 1 ELSE 0 END AS text_match,
                  (SELECT d.title FROM memory_sources ms JOIN documents d ON d.id = ms.document_id
                   WHERE ms.memory_id = m.id AND d.title IS NOT NULL LIMIT 1) AS document_title,
                  (SELECT ms.excerpt FROM memory_sources ms WHERE ms.memory_id = m.id LIMIT 1) AS excerpt
           FROM memories m
-          WHERE m.id IN (${ids.map((i) => `'${i}'`).join(',')})
-            AND ${fclause}
-        `)
+          WHERE m.id = ANY($1::uuid[])
+            AND ${hydrateAccess.text}
+            AND TRUE${hydrateOpt.text}
+        `, [ids, ...hydrateAccess.params, like, ...hydrateOpt.params])
+  }
 
   if (engine === 'mem0') {
     // Chemin Mem0 seul : retrieval sémantique → hydratation SQL → permission + ranking.
@@ -300,6 +342,6 @@ function likePattern(q: string): string {
     .split(/\s+/)
     .filter((w) => w.length > 3)
     .slice(0, 5)
-  if (words.length === 0) return `'%__none__%'`
-  return `'%${words.join('%')}%'`
+  if (words.length === 0) return '%__none__%'
+  return `%${words.join('%')}%`
 }

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { DbHandle } from '../db/client.js'
 import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
+import { licenseGate } from '../services/license-mode.js'
 import { generateToken, hashToken } from './auth.js'
 import { mcpActiveSessions } from './http.js'
 
@@ -33,12 +34,13 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
     const rows = await dbh.query(
       `SELECT id, name, status, allowed_scopes, allowed_tools, created_by, created_at::text AS created_at,
               last_used_at::text AS last_used_at, expires_at::text AS expires_at
-       FROM mcp_clients WHERE organization_id = '${req.user!.organizationId}' ORDER BY created_at DESC`,
+       FROM mcp_clients WHERE organization_id = $1::uuid ORDER BY created_at DESC`, [req.user!.organizationId],
     )
     res.json({ clients: rows })
   })
 
-  router.post('/clients', ...guard, async (req, res) => {
+  /* Nouveau client MCP = nouvelle intégration : bloqué en mode restreint. */
+  router.post('/clients', licenseGate(dbh), ...guard, async (req, res) => {
     const { name, scopes, tools, expiresInDays } = req.body as {
       name?: string; scopes?: string[]; tools?: string[]; expiresInDays?: number
     }
@@ -46,12 +48,12 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
       return res.status(400).json({ error: 'nom, scopes et tools requis' })
     }
     const token = generateToken()
-    const expires = expiresInDays ? `, expires_at = now() + interval '${Math.floor(expiresInDays)} days'` : ''
     const rows = await dbh.query<{ id: string }>(
-      `INSERT INTO mcp_clients (organization_id, name, token_hash, status, allowed_scopes, allowed_tools, created_by${expiresInDays ? ', expires_at' : ''})
-       VALUES ('${req.user!.organizationId}', '${name.replace(/'/g, "''")}', '${hashToken(token)}', 'active',
-               '${JSON.stringify(scopes)}'::jsonb, '${JSON.stringify(tools)}'::jsonb, '${req.user!.name.replace(/'/g, "''")}'${expiresInDays ? `, now() + interval '${Math.floor(expiresInDays)} days'` : ''})
+      `INSERT INTO mcp_clients (organization_id, name, token_hash, status, allowed_scopes, allowed_tools, created_by, expires_at)
+       VALUES ($1, $2, $3, 'active', $4::jsonb, $5::jsonb, $6,
+               CASE WHEN $7::int IS NOT NULL THEN now() + make_interval(days => $7::int) ELSE NULL END)
        RETURNING id`,
+      [req.user!.organizationId, name, hashToken(token), JSON.stringify(scopes), JSON.stringify(tools), req.user!.name, expiresInDays ? Math.floor(expiresInDays) : null],
     )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'mcp.client_created', targetType: 'mcp_client', targetId: rows[0].id,
@@ -63,7 +65,8 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
   router.post('/clients/:id/rotate', ...guard, async (req, res) => {
     const token = generateToken()
     await dbh.exec(
-      `UPDATE mcp_clients SET token_hash = '${hashToken(token)}', status = 'active', last_used_at = NULL WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`,
+      `UPDATE mcp_clients SET token_hash = $1, status = 'active', last_used_at = NULL WHERE id = $2::uuid AND organization_id = $3::uuid`,
+      [hashToken(token), req.params.id, req.user!.organizationId],
     )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'mcp.client_rotated', targetType: 'mcp_client', targetId: String(req.params.id), detail: {},
@@ -72,7 +75,10 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
   })
 
   router.post('/clients/:id/disable', ...guard, async (req, res) => {
-    await dbh.exec(`UPDATE mcp_clients SET status = 'disabled' WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`)
+    await dbh.exec(
+      `UPDATE mcp_clients SET status = 'disabled' WHERE id = $1::uuid AND organization_id = $2::uuid`,
+      [req.params.id, req.user!.organizationId],
+    )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'mcp.client_disabled', targetType: 'mcp_client', targetId: String(req.params.id), detail: {},
     })
@@ -80,7 +86,10 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
   })
 
   router.delete('/clients/:id', ...guard, async (req, res) => {
-    await dbh.exec(`DELETE FROM mcp_clients WHERE id = '${req.params.id}' AND organization_id = '${req.user!.organizationId}'`)
+    await dbh.exec(
+      `DELETE FROM mcp_clients WHERE id = $1::uuid AND organization_id = $2::uuid`,
+      [req.params.id, req.user!.organizationId],
+    )
     await audit(dbh, req.user!.organizationId, {
       actor: req.user, action: 'mcp.client_deleted', targetType: 'mcp_client', targetId: String(req.params.id), detail: {},
     })
@@ -90,12 +99,13 @@ export function buildMcpManagementRouter(dbh: DbHandle): Router {
   router.get('/clients/:id/activity', ...guard, async (req, res) => {
     const rows = await dbh.query(
       `SELECT action, target_id, detail, created_at::text AS created_at FROM audit_events
-       WHERE organization_id = '${req.user!.organizationId}'
-         AND (action LIKE 'mcp.%' OR (target_type = 'mcp_client' AND target_id = '${req.params.id}'))
-         AND (detail->>'client' = (SELECT name FROM mcp_clients WHERE id = '${req.params.id}')
-              OR target_id = '${req.params.id}'
+       WHERE organization_id = $1::uuid
+         AND (action LIKE 'mcp.%' OR (target_type = 'mcp_client' AND target_id = $2::uuid))
+         AND (detail->>'client' = (SELECT name FROM mcp_clients WHERE id = $2::uuid)
+              OR target_id = $2::uuid
               OR action LIKE 'mcp.request%')
        ORDER BY created_at DESC LIMIT 50`,
+      [req.user!.organizationId, req.params.id],
     )
     res.json({ activity: rows })
   })

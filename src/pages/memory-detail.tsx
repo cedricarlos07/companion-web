@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Card } from '@/components/common/stat-card'
 import {
@@ -12,8 +12,8 @@ import { PersonAvatar } from '@/components/common/person-avatar'
 import { EmptyState } from '@/components/common/states'
 import { Modal } from '@/components/common/modal'
 import { Button } from '@/components/base/buttons/button'
+import { Input } from '@/components/base/input/input'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
-import { getMemory } from '@/data/memories'
 import { api } from '@/services/api'
 import {
   Alert02Icon,
@@ -52,52 +52,82 @@ const RELATED_META: Record<string, string> = {
   project: 'Projet',
 }
 
+type MemoryDetail = NonNullable<Awaited<ReturnType<typeof api.memory>>>
+
 export function MemoryDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { pushToast } = useAppStore()
-  const mockMemory = id ? getMemory(id) : undefined
-  const [status, setStatus] = useState(mockMemory?.status)
+  const [detail, setDetail] = useState<MemoryDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState<string | null>(null)
+  const [actionPending, setActionPending] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('')
 
-  // Mémoire réelle (UUID) quand l'id n'est pas un id de démo.
-  const [real, setReal] = useState<Awaited<ReturnType<typeof api.memory>> | null>(null)
+  const load = useCallback(async () => {
+    if (!id) return
+    setLoading(true)
+    const res = await api.memory(id)
+    setDetail(res)
+    setStatus(res ? String(res.memory.status) : null)
+    setLoading(false)
+  }, [id])
+
   useEffect(() => {
-    if (mockMemory || !id) return
-    api.memory(id).then((res) => {
-      if (res?.memory) {
-        setReal(res)
-        setStatus(String(res.memory.status) as typeof status)
-      }
-    })
-  }, [id, mockMemory])
+    void load()
+  }, [load])
 
-  const evidence: { excerpt: string | null; location: string | null; document_title: string | null; mime_type: string | null }[] =
-    real?.evidence ?? []
-
-  function verify() {
+  async function verify() {
+    if (!detail || actionPending) return
+    setActionPending(true)
+    const res = await api.verifyMemory(String(detail.memory.id))
+    setActionPending(false)
+    if (res === null) {
+      pushToast('Vérification impossible — backend indisponible.', 'error')
+      return
+    }
     setStatus('verified')
-    if (real) {
-      api.verifyMemory(String(real.memory.id)).then((ok) => {
-        pushToast(ok ? 'Mémoire vérifiée en base.' : 'Vérification impossible (backend indisponible).', ok ? 'success' : 'error')
-      })
-    } else {
-      pushToast('Mémoire vérifiée.')
-    }
+    pushToast('Mémoire vérifiée en base.', 'success')
   }
 
-  function deprecate() {
+  async function deprecate() {
+    if (!detail || actionPending) return
+    setActionPending(true)
+    const res = await api.setMemoryStatus(String(detail.memory.id), 'deprecated', 'marquée obsolète')
+    setActionPending(false)
+    if (res === null) {
+      pushToast('Action impossible — backend indisponible.', 'error')
+      return
+    }
     setStatus('deprecated')
-    if (real) {
-      api.setMemoryStatus(String(real.memory.id), 'deprecated', 'marquée obsolète').then((ok) => {
-        pushToast(ok ? 'Mémoire marquée obsolète.' : 'Action impossible (backend indisponible).', ok ? 'info' : 'error')
-      })
-    } else {
-      pushToast('Mémoire marquée obsolète.', 'info')
-    }
+    pushToast('Mémoire marquée obsolète.', 'info')
   }
 
-  if (!mockMemory && !real) {
+  async function reportConflict() {
+    if (!detail || actionPending) return
+    if (reportReason.trim().length < 5) {
+      pushToast('Décrivez le conflit en quelques mots.', 'error')
+      return
+    }
+    setActionPending(true)
+    const res = await api.setMemoryStatus(String(detail.memory.id), 'contradicted', reportReason.trim())
+    setActionPending(false)
+    if (res === null) {
+      pushToast('Signalement impossible — backend indisponible.', 'error')
+      return
+    }
+    setReportOpen(false)
+    setReportReason('')
+    setStatus('contradicted')
+    pushToast('Conflit signalé — le Knowledge Agent va proposer une résolution.', 'info')
+  }
+
+  if (loading) {
+    return <Card><p className="text-body-2-medium text-text-tertiary">Chargement de la connaissance…</p></Card>
+  }
+
+  if (!detail) {
     return (
       <EmptyState
         title="Connaissance introuvable."
@@ -107,51 +137,50 @@ export function MemoryDetailPage() {
     )
   }
 
-  const memory: Memory = mockMemory ?? {
-    id: String(real!.memory.id),
-    type: String(real!.memory.type) as Memory['type'],
-    title: String(real!.memory.title),
-    content: String(real!.memory.content),
-    scope: String(real!.memory.scope),
-    roleTitle: String(real!.memory.role_title ?? ''),
-    ownerId: String(real!.memory.employee_id ?? ''),
-    ownerName: String(real!.memory.employee_name ?? real!.memory.contributor ?? ''),
-    confidence: Number(real!.memory.confidence),
-    importance: Number(real!.memory.importance),
-    status: status ?? (String(real!.memory.status) as Memory['status']),
-    updated: String(real!.memory.updated_at ?? ''),
-    validFrom: String(real!.memory.valid_from ?? ''),
+  const m = detail.memory
+  const memory: Memory = {
+    id: String(m.id),
+    type: String(m.type) as Memory['type'],
+    title: String(m.title),
+    content: String(m.content),
+    scope: String(m.scope),
+    roleTitle: String(m.role_title ?? ''),
+    ownerId: String(m.employee_id ?? ''),
+    ownerName: String(m.employee_name ?? m.contributor ?? ''),
+    confidence: Number(m.confidence),
+    importance: Number(m.importance),
+    status: (status ?? String(m.status)) as Memory['status'],
+    updated: String(m.updated_at ?? ''),
+    validFrom: String(m.valid_from ?? ''),
     evidence: [],
-    history: (real!.versions ?? []).map((v) => ({
+    history: (detail.versions ?? []).map((v) => ({
       id: `v${v.version}`,
       kind: v.version === 1 ? ('created' as const) : ('modified' as const),
       date: v.created_at.slice(0, 16).replace('T', ' '),
       actor: v.changed_by,
       detail: v.change_reason,
     })),
-    related: (real!.related ?? []).map((r) => ({
+    related: (detail.related ?? []).map((r) => ({
       id: String(r.id),
       kind: 'memory' as const,
       label: r.title,
       meta: r.kind,
       href: `/brain/${r.id}`,
     })),
-    contributor: String(real!.memory.contributor ?? ''),
-    observedDate: String(real!.memory.created_at ?? '').slice(0, 10),
-    confirmations: Number(real!.memory.version ?? 1),
-    humanValidated: Boolean(real!.memory.human_validated),
+    contributor: String(m.contributor ?? ''),
+    observedDate: String(m.created_at ?? '').slice(0, 10),
+    confirmations: Number(m.version ?? 1),
+    humanValidated: Boolean(m.human_validated),
   }
 
-  // Preuves : mock Evidence ou lignes réelles converties.
-  const evidenceList: Evidence[] = mockMemory
-    ? mockMemory.evidence
-    : evidence.map((e, i) => ({
-        id: `ev-${i}`,
-        kind: e.mime_type === 'pdf' ? 'document' : e.mime_type === 'paste' ? 'note' : 'document',
-        title: e.document_title ?? 'Source importée',
-        date: e.location ?? '',
-        author: 'Import',
-      }))
+  // Preuves réelles : extraits des documents sources.
+  const evidenceList = (detail.evidence ?? []).map((e, i) => ({
+    id: `ev-${i}`,
+    kind: (e.mime_type === 'pdf' ? 'document' : 'note') as Evidence['kind'],
+    title: e.document_title ?? 'Source importée',
+    date: e.location ?? '',
+    author: 'Import',
+  }))
 
   return (
     <div>
@@ -175,7 +204,7 @@ export function MemoryDetailPage() {
           <div className="rounded-2xl border border-border-button-default bg-background-primary-default p-6 shadow-card">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <KnowledgeTypeBadge type={memory.type} />
-              <KnowledgeStatusBadge status={status ?? memory.status} />
+              <KnowledgeStatusBadge status={memory.status} />
               <ConfidenceBadge value={memory.confidence} />
             </div>
             <h1 className="text-title-1-medium text-text-primary">{memory.title}</h1>
@@ -208,11 +237,15 @@ export function MemoryDetailPage() {
           </div>
 
           <Card title="Preuves">
-            <div className="grid gap-2 sm:grid-cols-2">
-              {evidenceList.map((e, i) => (
-                <EvidenceCard key={e.id} evidence={e} index={i} />
-              ))}
-            </div>
+            {evidenceList.length === 0 ? (
+              <p className="text-body-2-medium text-text-secondary">Aucun extrait source rattaché.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {evidenceList.map((e, i) => (
+                  <EvidenceCard key={e.id} evidence={e} index={i} />
+                ))}
+              </div>
+            )}
             <p className="mt-3 text-caption-1-medium text-text-tertiary">
               Chaque affirmation est traçable jusqu'à sa source d'origine.
             </p>
@@ -250,24 +283,17 @@ export function MemoryDetailPage() {
               <Button
                 className="w-full justify-center"
                 leadingIcon={adaptIcon(CheckmarkCircle02Icon, 20)}
-                onClick={verify}
-                disabled={status === 'verified'}
+                onClick={() => void verify()}
+                disabled={actionPending || memory.status === 'verified'}
               >
                 Vérifier
               </Button>
               <Button
                 variant="secondary"
                 className="w-full justify-center"
-                leadingIcon={adaptIcon(PencilEdit01Icon, 20)}
-                onClick={() => pushToast('Modification enregistrée.')}
-              >
-                Modifier
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-center"
                 leadingIcon={adaptIcon(ArchiveIcon, 20)}
-                onClick={deprecate}
+                onClick={() => void deprecate()}
+                disabled={actionPending}
               >
                 Déprécier
               </Button>
@@ -276,10 +302,15 @@ export function MemoryDetailPage() {
                 className="w-full justify-center"
                 leadingIcon={adaptIcon(Alert02Icon, 20)}
                 onClick={() => setReportOpen(true)}
+                disabled={actionPending}
               >
                 Signaler un conflit
               </Button>
             </div>
+            <p className="mt-3 text-caption-1-regular text-text-tertiary">
+              L'édition de contenu passe par une nouvelle version sourcée — importez la source
+              corrigée et Companion produira la révision.
+            </p>
           </Card>
 
           <Card title="Historique">
@@ -318,6 +349,9 @@ export function MemoryDetailPage() {
                   </li>
                 )
               })}
+              {memory.history.length === 0 && (
+                <li className="text-body-2-medium text-text-secondary">Aucune version enregistrée.</li>
+              )}
             </ol>
           </Card>
 
@@ -326,6 +360,9 @@ export function MemoryDetailPage() {
               {evidenceList.slice(0, 4).map((e, i) => (
                 <SourceReference key={e.id} index={i + 1} title={e.title} meta={e.date} />
               ))}
+              {evidenceList.length === 0 && (
+                <p className="text-body-2-medium text-text-secondary">Source : {memory.contributor || 'import'}</p>
+              )}
             </div>
           </Card>
         </div>
@@ -340,27 +377,27 @@ export function MemoryDetailPage() {
             <Button variant="secondary" size="small" onClick={() => setReportOpen(false)}>
               Annuler
             </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                setReportOpen(false)
-                pushToast('Signalement envoyé — un administrateur va comparer les sources.', 'info')
-              }}
-            >
-              Envoyer le signalement
+            <Button size="small" disabled={actionPending} onClick={() => void reportConflict()}>
+              {actionPending ? 'Envoi…' : 'Envoyer le signalement'}
             </Button>
           </>
         }
       >
-        <p className="text-body-2-regular text-text-secondary">
-          Companion comparera cette connaissance avec les autres sources et proposera une résolution.
-          Les deux versions resteront consultables jusqu'à la décision.
+        <Input
+          label="Nature du conflit"
+          value={reportReason}
+          onChange={setReportReason}
+          placeholder="ex. une source plus récente dit le contraire"
+        />
+        <p className="mt-3 text-body-2-regular text-text-secondary">
+          La mémoire passe en statut « contradictoire » et le Knowledge Agent comparera les sources pour
+          proposer une résolution. Les deux versions restent consultables jusqu'à la décision.
         </p>
         <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-background-secondary-default p-3">
           <HugeIcon icon={AlertCircleIcon} size="sm" className="mt-0.5 shrink-0 text-amber-500" />
           <p className="text-caption-1-regular text-text-secondary">
-            Cette mémoire est actuellement « {memoryStatusMeta(status ?? memory.status).label} ». Un conflit
-            signalé passera en révision sans supprimer les données.
+            Cette mémoire est actuellement « {memoryStatusMeta(memory.status).label} ». Le signalement ne
+            supprime aucune donnée.
           </p>
         </div>
       </Modal>

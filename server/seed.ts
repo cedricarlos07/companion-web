@@ -433,24 +433,35 @@ export async function seedDatabase(dbh: DbHandle) {
   const BATCH = 50
   for (let start = 0; start < memoryQueue.length; start += BATCH) {
     const batch = memoryQueue.slice(start, start + BATCH)
-    const values: string[] = []
+    const tuples: string[] = []
+    const params: unknown[] = []
     for (const m of batch) {
       const createdAt = new Date(Date.now() - m.createdOffsetDays * 86_400_000).toISOString()
-      let embeddingSql = 'NULL'
+      let embedding: string | null = null
       if (embeddingBudget > 0 && m.importance >= 60) {
         const { vector } = await embed(`${m.title}\n${m.content}`)
-        embeddingSql = `'${toPgVectorLiteral(vector)}'::vector`
+        embedding = toPgVectorLiteral(vector)
         embeddingBudget--
       }
-      values.push(
-        `('${m.organizationId}', '${m.type}', '${esc(m.title)}', '${esc(m.content)}', '${m.scope}', '${m.employeeId}', '${m.roleId}', '${m.departmentId}', '${m.status}', ${m.confidence}, ${m.importance}, '2024', '${esc(m.contributor)}', 'human', true, ${embeddingSql}, ${embeddingSql === 'NULL' ? 'NULL' : "'local-hash'"}, '${createdAt}', '${createdAt}')`,
+      const b = params.length
+      // Les indices dépendent de la présence du vecteur : sans embedding, la
+      // ligne ne pousse que 16 params (le created_at devient $b+16).
+      const createdIdx = embedding ? b + 18 : b + 16
+      tuples.push(
+        `($${b + 1}::uuid, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}::uuid, $${b + 7}::uuid, $${b + 8}::uuid, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12}, $${b + 13}, $${b + 14}, $${b + 15}, ${embedding ? `$${b + 16}::vector` : 'NULL'}, ${embedding ? `$${b + 17}` : 'NULL'}, $${createdIdx}, $${createdIdx})`,
+      )
+      params.push(
+        m.organizationId, m.type, m.title, m.content, m.scope, m.employeeId, m.roleId, m.departmentId,
+        m.status, m.confidence, m.importance, '2024', m.contributor, 'human', true,
+        ...(embedding ? [embedding, 'local-hash'] : []),
+        createdAt,
       )
     }
     await dbh.exec(`
       INSERT INTO memories (organization_id, type, title, content, scope, employee_id, role_id, department_id,
         status, confidence, importance, valid_from, contributor, origin, human_validated, embedding, embedding_provider, created_at, updated_at)
-      VALUES ${values.join(',')}
-    `)
+      VALUES ${tuples.join(', ')}
+    `, params)
     generated += batch.length
   }
 
@@ -497,6 +508,3 @@ async function usersTable() {
   return users
 }
 
-function esc(s: string): string {
-  return s.replace(/'/g, "''").replace(/\\/g, '\\\\')
-}

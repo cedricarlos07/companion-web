@@ -31,13 +31,13 @@ export class CompanionNativeMemoryProvider implements MemoryProvider {
     const topK = Math.min(input.topK ?? 20, 50)
     const rows = await this.dbh.query<{ id: string; title: string; content: string; similarity: string | null }>(
       `SELECT m.id, m.title, m.content,
-              1 - (m.embedding <=> '${toPgVectorLiteral(vector)}'::vector) AS similarity
+              1 - (m.embedding <=> $1::vector) AS similarity
        FROM memories m
-       WHERE m.organization_id = '${input.organizationId}'
+       WHERE m.organization_id = $2::uuid
          AND m.status IN ('verified', 'active', 'candidate', 'contradicted')
          AND m.embedding IS NOT NULL
-       ORDER BY m.embedding <=> '${toPgVectorLiteral(vector)}'::vector
-       LIMIT ${topK}`,
+       ORDER BY m.embedding <=> $3::vector
+       LIMIT $4`, [toPgVectorLiteral(vector), input.organizationId, toPgVectorLiteral(vector), topK],
     )
     return rows
       .map((r) => ({

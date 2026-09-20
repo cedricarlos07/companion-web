@@ -44,7 +44,7 @@ export async function authorizeToolCall(
   // Scope mémoire : un client scoped ne peut pas toucher un hors-périmètre.
   if (target?.employeeId) {
     const emp = await dbh
-      .query<{ department_id: string | null }>(`SELECT department_id FROM employees WHERE id = '${target.employeeId}' AND organization_id = '${client.organizationId}'`)
+      .query<{ department_id: string | null }>(`SELECT department_id FROM employees WHERE id = $1::uuid AND organization_id = $2::uuid`, [target.employeeId, client.organizationId])
       .catch(() => [])
     if (!emp[0]) {
       throw new PolicyDeniedError('employé introuvable dans cette organisation (cross-org refusé)', 'scope_denied')
@@ -65,7 +65,7 @@ export async function authorizeToolCall(
   }
   if (target?.roleId) {
     const role = await dbh
-      .query<{ title: string | null }>(`SELECT title FROM roles WHERE id = '${target.roleId}' AND organization_id = '${client.organizationId}'`)
+      .query<{ title: string | null }>(`SELECT title FROM roles WHERE id = $1::uuid AND organization_id = $2::uuid`, [target.roleId, client.organizationId])
       .catch(() => [])
     if (!role[0]) {
       throw new PolicyDeniedError('rôle introuvable dans cette organisation (cross-org refusé)', 'scope_denied')

@@ -22,7 +22,7 @@ export interface HandoverAnalysisSection {
 
 export async function startHandover(dbh: DbHandle, organizationId: string, employeeId: string, actorName: string) {
   const emp = await dbh.query<{ id: string; role_id: string | null; first_name: string; last_name: string }>(
-    `SELECT id, role_id, first_name, last_name FROM employees WHERE id = '${employeeId}' AND organization_id = '${organizationId}'`,
+    `SELECT id, role_id, first_name, last_name FROM employees WHERE id = $1::uuid AND organization_id = $2::uuid`, [employeeId, organizationId],
   )
   const employee = emp[0]
   if (!employee) throw new Error('employé introuvable')
@@ -46,7 +46,7 @@ export async function startHandover(dbh: DbHandle, organizationId: string, emplo
   const uniques = await dbh.query<{ id: string; title: string; type: string; content: string }>(`
     SELECT m.id, m.title, m.type, m.content
     FROM memories m
-    WHERE m.employee_id = '${employeeId}'
+    WHERE m.employee_id = $1::uuid
       AND m.type IN ('procedure', 'decision', 'relationship', 'lesson')
       AND m.status IN ('active', 'verified', 'candidate')
       AND NOT EXISTS (
@@ -56,7 +56,7 @@ export async function startHandover(dbh: DbHandle, organizationId: string, emplo
       )
     ORDER BY m.importance DESC
     LIMIT 20
-  `)
+  `, [employeeId])
 
   // Gaps → targeted questions.
   const gaps = detectGaps(sections, uniques)
@@ -103,12 +103,12 @@ async function analyzeCoverage(dbh: DbHandle, employeeId: string, roleId: string
   const sections: HandoverAnalysisSection[] = []
   for (const def of sectionDefs) {
     const owned = await dbh.query<{ cnt: string }>(
-      `SELECT count(*)::text AS cnt FROM memories WHERE employee_id = '${employeeId}' AND type = ANY(${sqlAny(def.types)}) AND status IN ('active','verified','candidate')`,
+      `SELECT count(*)::text AS cnt FROM memories WHERE employee_id = $1::uuid AND type = ANY($2::text[]) AND status IN ('active','verified','candidate')`, [employeeId, def.types],
     )
     // Role Brain reference: what the role already holds independently of this person.
     const roleOwned = roleId
       ? await dbh.query<{ cnt: string }>(
-          `SELECT count(DISTINCT lower(title))::text AS cnt FROM memories WHERE role_id = '${roleId}' AND type = ANY(${sqlAny(def.types)}) AND status IN ('active','verified')`,
+          `SELECT count(DISTINCT lower(title))::text AS cnt FROM memories WHERE role_id = $1::uuid AND type = ANY($2::text[]) AND status IN ('active','verified')`, [roleId, def.types],
         )
       : [{ cnt: '0' }]
     const ownedCount = Number(owned[0]?.cnt ?? 0)
@@ -118,7 +118,7 @@ async function analyzeCoverage(dbh: DbHandle, employeeId: string, roleId: string
       ? 60
       : Math.max(10, Math.min(98, Math.round((roleCount / (roleCount + ownedCount)) * 100 + 20)))
     const items = await dbh.query<{ title: string }>(
-      `SELECT title FROM memories WHERE employee_id = '${employeeId}' AND type = ANY(${sqlAny(def.types)}) AND status IN ('active','verified','candidate') ORDER BY importance DESC LIMIT 5`,
+      `SELECT title FROM memories WHERE employee_id = $1::uuid AND type = ANY($2::text[]) AND status IN ('active','verified','candidate') ORDER BY importance DESC LIMIT 5`, [employeeId, def.types],
     )
     sections.push({ key: def.key, label: def.label, coverage, items: items.map((i) => i.title) })
   }
@@ -206,18 +206,18 @@ export async function answerInterviewQuestion(
   answeredBy: string,
 ) {
   const gaps = await dbh.query<{ id: string; handover_id: string; question: string; kind: string; related_memory_id: string | null }>(
-    `SELECT id, handover_id, question, kind, related_memory_id FROM handover_gaps WHERE id = '${gapId}' AND handover_id = '${handoverId}'`,
+    `SELECT id, handover_id, question, kind, related_memory_id FROM handover_gaps WHERE id = $1::uuid AND handover_id = $2::uuid`, [gapId, handoverId],
   )
   const gap = gaps[0]
   if (!gap) throw new Error('question introuvable')
 
   const hv = await dbh.query<{ employee_id: string; role_id: string | null }>(
-    `SELECT employee_id, role_id FROM handovers WHERE id = '${handoverId}'`,
+    `SELECT employee_id, role_id FROM handovers WHERE id = $1::uuid`, [handoverId],
   )
   const employeeId = hv[0]?.employee_id
   const roleId = hv[0]?.role_id ?? null
   const emp = await dbh.query<{ first_name: string; last_name: string; role_id: string | null }>(
-    `SELECT first_name, last_name, role_id FROM employees WHERE id = '${employeeId}'`,
+    `SELECT first_name, last_name, role_id FROM employees WHERE id = $1::uuid`, [employeeId],
   )
   const employeeName = emp[0] ? `${emp[0].first_name} ${emp[0].last_name}` : answeredBy
 
@@ -270,7 +270,7 @@ export async function answerInterviewQuestion(
 
   // Recompute readiness: answered gaps lift coverage.
   await recomputeReadiness(dbh, handoverId)
-  return { answer: (await dbh.query(`SELECT * FROM handover_answers WHERE gap_id = '${gapId}'`))[0], memory: result.memory, created: result.created }
+  return { answer: (await dbh.query(`SELECT * FROM handover_answers WHERE gap_id = $1::uuid`, [gapId]))[0], memory: result.memory, created: result.created }
 }
 
 function guessType(question: string, answer: string): string {
@@ -295,11 +295,11 @@ function titleFromAnswer(question: string, answer: string): string {
 
 async function recomputeReadiness(dbh: DbHandle, handoverId: string) {
   const hv = await dbh.query<{ employee_id: string; readiness: number; analysis: unknown }>(
-    `SELECT employee_id, readiness, analysis FROM handovers WHERE id = '${handoverId}'`,
+    `SELECT employee_id, readiness, analysis FROM handovers WHERE id = $1::uuid`, [handoverId],
   )
   if (!hv[0]) return
   const gaps = await dbh.query<{ total: string; answered: string }>(
-    `SELECT count(*)::text AS total, count(*) FILTER (WHERE status IN ('answered','resolved'))::text AS answered FROM handover_gaps WHERE handover_id = '${handoverId}'`,
+    `SELECT count(*)::text AS total, count(*) FILTER (WHERE status IN ('answered','resolved'))::text AS answered FROM handover_gaps WHERE handover_id = $1::uuid`, [handoverId],
   )
   const total = Number(gaps[0]?.total ?? 0)
   const answered = Number(gaps[0]?.answered ?? 0)
@@ -317,25 +317,25 @@ async function recomputeReadiness(dbh: DbHandle, handoverId: string) {
 /** Generates the Human Handover Pack + Machine Context Pack. */
 export async function generateHandoverPack(dbh: DbHandle, organizationId: string, handoverId: string, actorName: string) {
   const hv = await dbh.query<{ id: string; employee_id: string; role_id: string | null; readiness: number; successor_employee_id: string | null }>(
-    `SELECT id, employee_id, role_id, readiness, successor_employee_id FROM handovers WHERE id = '${handoverId}' AND organization_id = '${organizationId}'`,
+    `SELECT id, employee_id, role_id, readiness, successor_employee_id FROM handovers WHERE id = $1::uuid AND organization_id = $2::uuid`, [handoverId, organizationId],
   )
   const handover = hv[0]
   if (!handover) throw new Error('handover introuvable')
 
   const emp = await dbh.query<{ first_name: string; last_name: string; role_id: string | null }>(
-    `SELECT first_name, last_name, role_id FROM employees WHERE id = '${handover.employee_id}'`,
+    `SELECT first_name, last_name, role_id FROM employees WHERE id = $1::uuid`, [handover.employee_id],
   )
   const employeeName = emp[0] ? `${emp[0].first_name} ${emp[0].last_name}` : 'Employé'
   const roleTitle = emp[0]?.role_id
-    ? (await dbh.query<{ title: string }>(`SELECT title FROM roles WHERE id = '${emp[0].role_id}'`))[0]?.title
+    ? (await dbh.query<{ title: string }>(`SELECT title FROM roles WHERE id = $1::uuid`, [emp[0].role_id]))[0]?.title
     : ''
 
   const byType = async (types: string[]) =>
     dbh.query<{ id: string; title: string; content: string; status: string; confidence: number; contributor: string | null }>(
       `SELECT id, title, content, status, confidence, contributor FROM memories
-       WHERE employee_id = '${handover.employee_id}' AND type = ANY(${sqlAny(types)})
+       WHERE employee_id = $1::uuid AND type = ANY($2::text[])
          AND status IN ('active','verified','candidate')
-       ORDER BY importance DESC LIMIT 12`,
+       ORDER BY importance DESC LIMIT 12`, [handover.employee_id, types],
     )
 
   const [procedures, decisions, relations, projects, lessons, tasks] = await Promise.all([
@@ -407,6 +407,3 @@ export async function generateHandoverPack(dbh: DbHandle, organizationId: string
   return { humanPack, machinePack }
 }
 
-function sqlAny(values: string[]): string {
-  return `ARRAY[${values.map((v) => `'${v}'`).join(',')}]::text[]`
-}

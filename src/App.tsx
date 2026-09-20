@@ -29,6 +29,14 @@ import { ApprovalsPage } from '@/pages/approvals'
 import { ActivityPage } from '@/pages/activity'
 import { IntegrationsPage } from '@/pages/integrations'
 import { SettingsPage } from '@/pages/settings'
+import { BillingPage } from '@/pages/billing'
+import { PortalLayout } from '@/pages/portal/portal-layout'
+import { PortalDashboard } from '@/pages/portal/dashboard'
+import { PortalLicensePage } from '@/pages/portal/license'
+import { PortalDownloadsPage } from '@/pages/portal/downloads'
+import { PortalInstancesPage } from '@/pages/portal/instances'
+import { PortalInvoicesPage } from '@/pages/portal/invoices'
+import { PortalSupportPage } from '@/pages/portal/support'
 
 export default function App() {
   return (
@@ -38,6 +46,17 @@ export default function App() {
           {/* Standalone surfaces (no app chrome) */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/setup" element={<SetupPage />} />
+
+          {/* Portail Client KamaLoka — relation post-vente (licence, downloads,
+           * instances, factures, support). Séparé de l'application Companion. */}
+          <Route path="/portal" element={<PortalLayout />}>
+            <Route index element={<PortalDashboard />} />
+            <Route path="license" element={<PortalLicensePage />} />
+            <Route path="downloads" element={<PortalDownloadsPage />} />
+            <Route path="instances" element={<PortalInstancesPage />} />
+            <Route path="invoices" element={<PortalInvoicesPage />} />
+            <Route path="support" element={<PortalSupportPage />} />
+          </Route>
 
           {/* Main application */}
           <Route element={<AppShell />}>
@@ -54,6 +73,7 @@ export default function App() {
             <Route path="/sources/new" element={<NewSourcePage />} />
             <Route path="/knowledge-risk" element={<KnowledgeRiskPage />} />
             <Route path="/handovers" element={<HandoversPage />} />
+            <Route path="/handovers/new" element={<NewHandoverPage />} />
             <Route path="/handovers/new/:employeeId" element={<NewHandoverPage />} />
             <Route path="/handovers/:id" element={<HandoverDetailPage />} />
             <Route path="/handovers/:id/interview" element={<InterviewPage />} />
@@ -67,6 +87,7 @@ export default function App() {
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/billing" element={<BillingPage />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/home" replace />} />

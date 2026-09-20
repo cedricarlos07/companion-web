@@ -40,10 +40,11 @@ export const searchMemoryTool: ToolDefinition<{ query: string; topK?: number }, 
     const provider = await getMemoryProvider(ctx.dbh, ctx.organizationId)
     const hits = await provider.search({ query: input.query, organizationId: ctx.organizationId, topK: input.topK ?? 8 })
     if (hits.length === 0) return { results: [] }
-    const ids = hits.map((h) => `'${h.companionMemoryId}'`).join(',')
+    const ids = hits.map((h) => h.companionMemoryId)
     const rows = await runCompanionQuery<{ id: string; title: string; type: string; scope: string; status: string }>(
       ctx.dbh,
-      `SELECT id, title, type, scope, status FROM memories WHERE id IN (${ids}) AND status NOT IN ('rejected','superseded')`,
+      `SELECT id, title, type, scope, status FROM memories WHERE id = ANY($1::uuid[]) AND status NOT IN ('rejected','superseded')`,
+      [ids],
     )
     const scoreById = new Map(hits.map((h) => [h.companionMemoryId, h.score]))
     return {
@@ -65,16 +66,19 @@ export const getEmployeeContextTool: ToolDefinition<{ employeeId: string }, { na
   execute: async (ctx, input) => {
     const emp = await runCompanionQuery<{ first_name: string; last_name: string; role_title: string | null }>(
       ctx.dbh,
-      `SELECT e.first_name, e.last_name, r.title AS role_title FROM employees e LEFT JOIN roles r ON r.id = e.role_id WHERE e.id = '${input.employeeId}' AND e.organization_id = '${ctx.organizationId}'`,
+      `SELECT e.first_name, e.last_name, r.title AS role_title FROM employees e LEFT JOIN roles r ON r.id = e.role_id WHERE e.id = $1 AND e.organization_id = $2::uuid`,
+      [input.employeeId, ctx.organizationId],
     )
     if (!emp[0]) throw new Error('employé introuvable')
     const mems = await runCompanionQuery<{ title: string; type: string }>(
       ctx.dbh,
-      `SELECT title, type FROM memories WHERE employee_id = '${input.employeeId}' AND status NOT IN ('rejected','superseded') ORDER BY importance DESC LIMIT 10`,
+      `SELECT title, type FROM memories WHERE employee_id = $1::uuid AND status NOT IN ('rejected','superseded') ORDER BY importance DESC LIMIT 10`,
+      [input.employeeId],
     )
     const risk = await runCompanionQuery<{ score: number | null }>(
       ctx.dbh,
-      `SELECT (SELECT readiness FROM handovers WHERE employee_id = '${input.employeeId}' ORDER BY created_at DESC LIMIT 1) AS score`,
+      `SELECT (SELECT readiness FROM handovers WHERE employee_id = $1::uuid ORDER BY created_at DESC LIMIT 1) AS score`,
+      [input.employeeId],
     )
     return {
       name: `${emp[0].first_name} ${emp[0].last_name}`,
@@ -91,10 +95,11 @@ export const getRoleContextTool: ToolDefinition<{ roleId: string }, { title: str
   riskLevel: 'low',
   externalSideEffect: false,
   execute: async (ctx, input) => {
-    const role = await runCompanionQuery<{ title: string | null }>(ctx.dbh, `SELECT title FROM roles WHERE id = '${input.roleId}'`)
+    const role = await runCompanionQuery<{ title: string | null }>(ctx.dbh, `SELECT title FROM roles WHERE id = $1::uuid`, [input.roleId])
     const mems = await runCompanionQuery<{ title: string; type: string }>(
       ctx.dbh,
-      `SELECT title, type FROM memories WHERE role_id = '${input.roleId}' AND status IN ('active','verified') ORDER BY importance DESC LIMIT 12`,
+      `SELECT title, type FROM memories WHERE role_id = $1::uuid AND status IN ('active','verified') ORDER BY importance DESC LIMIT 12`,
+      [input.roleId],
     )
     return { title: role[0]?.title ?? null, memories: mems }
   },
@@ -108,9 +113,10 @@ export const getCompanyContextTool: ToolDefinition<Record<string, never>, { memo
   execute: async (ctx) => {
     const rows = await runCompanionQuery<{ memories: string; employees: string; roles: string }>(
       ctx.dbh,
-      `SELECT (SELECT count(*) FROM memories WHERE organization_id = '${ctx.organizationId}')::text AS memories,
-              (SELECT count(*) FROM employees WHERE organization_id = '${ctx.organizationId}' AND status <> 'former')::text AS employees,
-              (SELECT count(*) FROM roles WHERE organization_id = '${ctx.organizationId}')::text AS roles`,
+      `SELECT (SELECT count(*) FROM memories WHERE organization_id = $1::uuid)::text AS memories,
+              (SELECT count(*) FROM employees WHERE organization_id = $1::uuid AND status <> 'former')::text AS employees,
+              (SELECT count(*) FROM roles WHERE organization_id = $1::uuid)::text AS roles`,
+      [ctx.organizationId],
     )
     return {
       memories: Number(rows[0]?.memories ?? 0),
@@ -128,7 +134,8 @@ export const getProjectContextTool: ToolDefinition<{ query: string }, { projects
   execute: async (ctx, input) => {
     const rows = await runCompanionQuery<{ id: string; title: string }>(
       ctx.dbh,
-      `SELECT id, title FROM memories WHERE organization_id = '${ctx.organizationId}' AND type = 'project' AND title ILIKE '%${input.query.replace(/'/g, "''")}%' AND status NOT IN ('rejected','superseded') LIMIT 8`,
+      `SELECT id, title FROM memories WHERE organization_id = $1::uuid AND type = 'project' AND title ILIKE $2 AND status NOT IN ('rejected','superseded') LIMIT 8`,
+      [ctx.organizationId, `%${input.query}%`],
     )
     return { projects: rows }
   },
@@ -142,7 +149,8 @@ export const getKnowledgeGapsTool: ToolDefinition<{ handoverId: string }, { gaps
   execute: async (ctx, input) => {
     const gaps = await runCompanionQuery<{ id: string; question: string; status: string }>(
       ctx.dbh,
-      `SELECT id, question, status FROM handover_gaps WHERE handover_id = '${input.handoverId}' ORDER BY created_at`,
+      `SELECT id, question, status FROM handover_gaps WHERE handover_id = $1::uuid ORDER BY created_at`,
+      [input.handoverId],
     )
     return { gaps }
   },
@@ -229,14 +237,14 @@ export const requestApprovalTool: ToolDefinition<{ action: string; tool: string;
   riskLevel: 'low',
   externalSideEffect: false,
   execute: async (ctx, input) => {
-    const agent = await runCompanionQuery<{ name: string }>(ctx.dbh, `SELECT name FROM agents WHERE id = '${ctx.agentId}'`)
+    const agent = await runCompanionQuery<{ name: string }>(ctx.dbh, `SELECT name FROM agents WHERE id = $1::uuid`, [ctx.agentId])
     const rows = await runCompanionQuery<{ id: string }>(
       ctx.dbh,
       `INSERT INTO approvals (organization_id, run_id, agent_id, agent_name, action, tool, risk_level, preview, reason, status)
-       VALUES ('${ctx.organizationId}', '${ctx.runId}', '${ctx.agentId}', '${(agent[0]?.name ?? 'Agent').replace(/'/g, "''")}',
-               '${input.action.replace(/'/g, "''")}', '${input.tool.replace(/'/g, "''")}', '${input.riskLevel ?? 'medium'}',
-               '${JSON.stringify(input.preview).replace(/'/g, "''")}'::jsonb, '${(input.reason ?? '').replace(/'/g, "''")}', 'pending')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, 'pending')
        RETURNING id`,
+      [ctx.organizationId, ctx.runId, ctx.agentId, agent[0]?.name ?? 'Agent',
+       input.action, input.tool, input.riskLevel ?? 'medium', JSON.stringify(input.preview ?? {}), input.reason ?? ''],
     )
     return { approvalId: rows[0].id }
   },

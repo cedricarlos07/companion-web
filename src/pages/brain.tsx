@@ -9,7 +9,6 @@ import {
 } from '@/components/common/badges'
 import { EmptyState } from '@/components/common/states'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
-import { MEMORIES } from '@/data/memories'
 import { api } from '@/services/api'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
@@ -17,7 +16,7 @@ import { Select, SelectItem } from '@/components/base/select/select'
 import { Pagination } from '@/components/base/pagination/pagination'
 import { Search01Icon } from '@/lib/icons'
 import { cx } from '@/utils/cx'
-import type { KnowledgeType, MemoryStatus } from '@/types'
+import type { KnowledgeType, Memory, MemoryStatus } from '@/types'
 
 const TYPE_FILTERS: { id: KnowledgeType | 'all'; label: string }[] = [
   { id: 'all', label: 'Tout' },
@@ -29,13 +28,13 @@ const TYPE_FILTERS: { id: KnowledgeType | 'all'; label: string }[] = [
   { id: 'project', label: 'Projets' },
 ]
 
-const DEPARTMENTS = ['Commercial', 'Opérations', 'Finance', 'RH', 'Achats', 'Produit']
 const STATUSES: (MemoryStatus | 'all')[] = [
   'all',
   'candidate',
   'verified',
   'active',
   'conflicted',
+  'contradicted',
   'deprecated',
   'archived',
 ]
@@ -44,7 +43,8 @@ const PAGE_SIZE = 8
 
 export function BrainPage() {
   const navigate = useNavigate()
-  const [allMemories, setAllMemories] = useState(MEMORIES)
+  const [allMemories, setAllMemories] = useState<Memory[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [type, setType] = useState<KnowledgeType | 'all'>('all')
   const [dept, setDept] = useState('all')
@@ -52,16 +52,21 @@ export function BrainPage() {
   const [confidenceMin, setConfidenceMin] = useState('all')
   const [page, setPage] = useState(1)
 
-  // Company Brain réel — fallback mock si backend indisponible.
+  // Company Brain réel — aucune donnée si le backend ne répond pas.
   useEffect(() => {
     api.memories().then((real) => {
-      if (real && real.length > 0) setAllMemories(real)
+      if (real === null) {
+        setError('Impossible de charger les connaissances — backend indisponible.')
+        setAllMemories([])
+        return
+      }
+      setAllMemories(real)
     })
   }, [])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return allMemories.filter((m) => {
+    return (allMemories ?? []).filter((m) => {
       if (type !== 'all' && m.type !== type) return false
       if (dept !== 'all' && m.scope !== dept) return false
       if (status !== 'all' && m.status !== status) return false
@@ -69,12 +74,14 @@ export function BrainPage() {
       if (q && !`${m.title} ${m.content} ${m.ownerName}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [query, type, dept, status, confidenceMin])
+  }, [allMemories, query, type, dept, status, confidenceMin])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, pageCount)
   const current = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
+  // Départements réels dérivés des portées des mémoires chargées.
+  const DEPARTMENTS = useMemo(() => [...new Set((allMemories ?? []).map((m) => m.scope).filter(Boolean))], [allMemories])
   const deptItems = [{ id: 'all', label: 'Tous les départements' }, ...DEPARTMENTS.map((d) => ({ id: d, label: d }))]
   const statusItems = STATUSES.map((s) => ({
     id: s,
@@ -97,6 +104,12 @@ export function BrainPage() {
         subtitle="Explorez ce que votre organisation sait."
         actions={<Button onClick={() => navigate('/sources/new')}>Ajouter une source</Button>}
       />
+
+      {error && (
+        <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
 
       {/* Primary type filters */}
       <div className="mb-3 flex flex-wrap gap-1.5">
@@ -197,7 +210,9 @@ export function BrainPage() {
           <span>Confiance</span>
           <span>Statut</span>
         </div>
-        {current.length === 0 ? (
+        {allMemories === null ? (
+          <p className="px-4 py-4 text-body-2-medium text-text-tertiary">Chargement des connaissances…</p>
+        ) : current.length === 0 ? (
           <EmptyState
             title="Aucune connaissance trouvée."
             detail="Ajustez vos filtres ou importez une nouvelle source."
