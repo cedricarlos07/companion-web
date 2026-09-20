@@ -6,18 +6,25 @@ import { CloudUploadIcon } from '@/lib/icons'
 import { Loading03Icon, CheckmarkCircle02Icon } from '@/lib/icons'
 
 /**
- * French drag-and-drop file zone (BoardUI FileUpload mechanics, French copy).
- * Simulates upload progress, then completes — mock ingestion.
+ * French drag-and-drop file zone.
+ * Avec `onFiles` : remonte les vrais File[] sélectionnés (l'envoi et le
+ * traitement sont pilotés par l'appelant — aucune simulation).
+ * Sans `onFiles` : comportement historique de sélection locale (nom seul).
  */
 export function FileDropZone({
   hint,
   allowedExtensions = ['.pdf', '.docx', '.txt', '.md', '.xlsx', '.csv'],
   onComplete,
+  onFiles,
+  multiple = false,
   className,
 }: {
   hint?: string
   allowedExtensions?: readonly string[]
   onComplete?: (name: string) => void
+  /** Mode réel : les fichiers sélectionnés sont remontés tels quels. */
+  onFiles?: (files: File[]) => void
+  multiple?: boolean
   className?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -25,6 +32,19 @@ export function FileDropZone({
   const [progress, setProgress] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
   const [done, setDone] = useState(false)
+
+  function handleFiles(fileList: FileList | undefined | null) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0) return
+    if (onFiles) {
+      setFileName(files.length === 1 ? files[0].name : `${files.length} fichiers`)
+      setDone(true)
+      setProgress(null)
+      onFiles(files)
+      return
+    }
+    startUpload(files[0].name)
+  }
 
   function startUpload(name: string) {
     setFileName(name)
@@ -47,8 +67,7 @@ export function FileDropZone({
   function onDrop(e: DragEvent) {
     e.preventDefault()
     setDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) startUpload(file.name)
+    handleFiles(e.dataTransfer.files)
   }
 
   return (
@@ -85,7 +104,8 @@ export function FileDropZone({
         {progress === null ? (
           <>
             <p className="text-body-medium text-text-primary">
-              Glissez-déposez un fichier ou <span className="text-accent-700">parcourez</span>
+              Glissez-déposez {multiple ? 'des fichiers' : 'un fichier'} ou{' '}
+              <span className="text-accent-700">parcourez</span>
             </p>
             <p className="text-caption-1-medium text-text-tertiary">
               {hint ?? `Formats acceptés : ${allowedExtensions.join(' ')}`}
@@ -108,9 +128,9 @@ export function FileDropZone({
           type="file"
           className="hidden"
           accept={allowedExtensions.join(',')}
+          multiple={multiple}
           onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) startUpload(file.name)
+            handleFiles(e.target.files)
             e.target.value = ''
           }}
         />
