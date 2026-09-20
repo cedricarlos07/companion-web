@@ -28,6 +28,22 @@ jobs:
           grep -q "$(printf '## v%s' "${{ steps.ver.outputs.version }}")" CHANGELOG.md || {
             echo "CHANGELOG.md : pas d'entrée '## v${{ steps.ver.outputs.version }}'"; exit 1; }
 
+      - name: Gate documentation (code touché ⇒ doc touchée)
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || true)
+          if [ -z "$PREV" ]; then echo "Premier tag — gate doc ignoré."; exit 0; fi
+          CHANGED=$(git diff --name-only "$PREV" HEAD)
+          echo "$CHANGED"
+          FEATURES=$(echo "$CHANGED" | grep -cE '^(src/|server/)' || true)
+          DOCS=$(echo "$CHANGED" | grep -cE '^(docs/|README\.md|CHANGELOG\.md)' || true)
+          if [ "$FEATURES" -gt 0 ] && [ "$DOCS" -eq 0 ]; then
+            echo "::error::Modifications produit (src/, server/) sans mise à jour de la documentation."
+            echo "::error::Mettez à jour docs/guide-utilisateur.md et/ou docs/guide-administrateur.md"
+            echo "::error::(ou au minimum CHANGELOG.md/README.md pour un correctif technique) puis re-taggez."
+            exit 1
+          fi
+          echo "Doc à jour ($DOCS fichier(s) doc touché(s) pour $FEATURES fichier(s) code)."
+
       - name: Gates + build (qualité release)
         run: |
           npm ci

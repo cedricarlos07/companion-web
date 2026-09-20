@@ -6,6 +6,18 @@ Companion transforme les documents, emails et conversations de votre entreprise 
 
 ---
 
+## Documentation
+
+| Document | Pour qui |
+|---|---|
+| [Guide utilisateur](docs/guide-utilisateur.md) | Les équipes — chaque module, chaque écran, chaque action |
+| [Guide administrateur](docs/guide-administrateur.md) | DSI — installation, licence, updates, backups, sécurité, dépannage |
+| [Process de release](docs/process-release.md) | Équipe KamaLoka — publier une version (gate doc automatique) |
+| [Matrice d'audit frontend](docs/FRONTEND-AUDIT.md) | Dev — état anti-mock par route |
+| [Paiements & licences](docs/PAYMENTS.md) | Dev/business — Stripe, Jèko, cycles |
+
+---
+
 ## Installation production (VPS Linux)
 
 ```bash
