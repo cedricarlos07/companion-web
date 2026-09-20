@@ -1,30 +1,56 @@
+import { useOutletContext } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { Chip } from '@/components/base/badges/chip'
 import { Button } from '@/components/base/buttons/button'
 import { useAppStore } from '@/store/app-store'
-import { PORTAL_BILLING_PROFILE, PORTAL_CUSTOMER, PORTAL_PRICING, formatMoney } from '@/data/portal'
+import { portalGet, type PortalMe, type PortalSession } from '@/services/portal'
+
+interface PortalContext {
+  me: PortalMe
+  session: PortalSession
+}
 
 /** Portail client — licence : plan, limites, fichier .lic, renouvellement. */
 export function PortalLicensePage() {
+  const { me, session } = useOutletContext<PortalContext>()
   const { pushToast } = useAppStore()
-  const limits = [
-    ['Utilisateurs', PORTAL_CUSTOMER.limits.users],
-    ['Agents', PORTAL_CUSTOMER.limits.agents],
-    ['Intégrations', PORTAL_CUSTOMER.limits.integrations],
-    ['Instances autorisées', PORTAL_CUSTOMER.limits.instances],
-  ] as const
+
+  const limits: [string, number][] = [
+    ['Utilisateurs', Number(me.entitlements.users ?? 0)],
+    ['Agents', Number(me.entitlements.agents ?? 0)],
+    ['Intégrations', Number(me.entitlements.integrations ?? 0)],
+    ['Instances autorisées', me.maxInstances],
+  ]
+
+  async function downloadLicense() {
+    const res = await portalGet<{ licenseFile: string; expiresAt: string | null }>(session, '/portal/api/license-file')
+    if (!res?.licenseFile) {
+      pushToast('Fichier de licence indisponible — contactez KamaLoka.', 'error')
+      return
+    }
+    const blob = new Blob([res.licenseFile], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `companion-${me.licenseId}.lic`
+    a.click()
+    URL.revokeObjectURL(url)
+    pushToast(`${a.download} téléchargé — importez-le dans Companion → Facturation.`, 'success')
+  }
 
   return (
     <div className="space-y-4">
       <PageHeader title="Licence" subtitle="Votre droit d'usage de Companion, signé par KamaLoka." />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Companion Business">
+        <Card title={`Companion ${me.plan.charAt(0).toUpperCase()}${me.plan.slice(1)}`}>
           <div className="flex flex-wrap items-center gap-2">
-            <Chip variant="subtle" color="lime">{PORTAL_CUSTOMER.licenseStatus}</Chip>
+            <Chip variant="subtle" color={me.licenseStatus === 'active' ? 'lime' : 'yellow'}>
+              {me.licenseStatus === 'active' ? 'Active' : me.licenseStatus}
+            </Chip>
             <span className="text-caption-1-medium text-text-tertiary tabular-nums">
-              {PORTAL_CUSTOMER.licenseId}
+              {me.licenseId}
             </span>
           </div>
           <dl className="mt-3 space-y-1.5">
@@ -34,21 +60,24 @@ export function PortalLicensePage() {
                 <dd className="text-body-2-semibold text-text-primary tabular-nums">{value}</dd>
               </div>
             ))}
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-body-2-medium text-text-secondary">Expiration</dt>
-              <dd className="text-body-2-semibold text-text-primary tabular-nums">
-                {new Date(PORTAL_CUSTOMER.expiresAt).toLocaleDateString('fr-FR')}
-              </dd>
-            </div>
+            {me.expiresAt && (
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-body-2-medium text-text-secondary">Expiration</dt>
+                <dd className="text-body-2-semibold text-text-primary tabular-nums">
+                  {new Date(me.expiresAt).toLocaleDateString('fr-FR')}
+                </dd>
+              </div>
+            )}
           </dl>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              size="small"
-              onClick={() => pushToast(`companion-${PORTAL_CUSTOMER.licenseId}.lic téléchargé — importez-le dans Companion → Facturation.`, 'success')}
-            >
+            <Button size="small" onClick={() => void downloadLicense()}>
               Télécharger la licence
             </Button>
-            <Button variant="secondary" size="small" onClick={() => pushToast('Demande de renouvellement envoyée à KamaLoka.', 'success')}>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => { window.location.href = 'mailto:support@kamaloka.ai?subject=Renouvellement%20licence%20Companion' }}
+            >
               Renouveler
             </Button>
           </div>
@@ -56,12 +85,15 @@ export function PortalLicensePage() {
 
         <Card title="Renouvellement">
           <p className="text-body-2-medium text-text-secondary">
-            Votre licence expire le{' '}
-            {new Date(PORTAL_CUSTOMER.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.
+            {me.expiresAt ? (
+              <>Votre licence expire le{' '}
+                {new Date(me.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.</>
+            ) : (
+              'Licence sans date d\u2019expiration (Enterprise hors-ligne).'
+            )}
           </p>
           <p className="mt-2 text-body-2-medium text-text-secondary">
-            {PORTAL_CUSTOMER.plan} — {formatMoney(PORTAL_CUSTOMER.annualPrice)} / an ·
-            cycle {PORTAL_BILLING_PROFILE.cycle === 'annuel' ? 'annuel' : 'mensuel'}.
+            Cycle {me.cycle} · facturation en {me.currency}.
           </p>
           <p className="mt-2 text-caption-1-medium text-text-tertiary">
             L'engagement annuel est la formule par défaut (alignée sur la licence 12 mois) ; une
@@ -69,19 +101,12 @@ export function PortalLicensePage() {
             proposé quelques semaines avant l'échéance et le nouveau fichier de licence apparaît
             ici dès son émission.
           </p>
-          {(() => {
-            const pricing = PORTAL_PRICING.find((p) => p.currency === PORTAL_BILLING_PROFILE.currency)
-            return pricing ? (
-              <p className="mt-1 text-caption-1-medium text-text-tertiary">
-                Formule mensuelle : {formatMoney({ amount: pricing.monthly, currency: pricing.currency })} / mois
-                {pricing.currency === 'XOF' && (
-                  <> — soit {formatMoney({ amount: pricing.monthly * 12, currency: pricing.currency })} à l'année, contre {formatMoney({ amount: pricing.annual, currency: pricing.currency })} en annuel.</>
-                )}
-              </p>
-            ) : null
-          })()}
           <div className="mt-4">
-            <Button variant="secondary" size="small" onClick={() => pushToast('Demande de renouvellement envoyée à KamaLoka.', 'success')}>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => { window.location.href = 'mailto:support@kamaloka.ai?subject=Renouvellement%20licence%20Companion' }}
+            >
               Demander le renouvellement
             </Button>
           </div>
@@ -96,8 +121,8 @@ export function PortalLicensePage() {
           hors-ligne, la licence longue durée fait foi sans aucune connexion.
         </p>
         <p className="mt-2 text-caption-1-medium text-text-tertiary">
-          Changement de plan (Business → Enterprise) : le nouveau fichier de licence remplace
-          l'ancien ici, et vos limites sont ajustées automatiquement.
+          Changement de plan : le nouveau fichier de licence remplace l'ancien ici, et vos limites
+          sont ajustées automatiquement.
         </p>
       </Card>
     </div>

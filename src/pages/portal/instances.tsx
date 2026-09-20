@@ -1,57 +1,70 @@
+import { useOutletContext } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { Chip } from '@/components/base/badges/chip'
 import { Button } from '@/components/base/buttons/button'
-import { useAppStore } from '@/store/app-store'
-import { PORTAL_CUSTOMER, PORTAL_INSTANCES } from '@/data/portal'
+import type { PortalMe } from '@/services/portal'
 
 /** Portail client — instances self-hosted déclarées par les heartbeats. */
 export function PortalInstancesPage() {
-  const { pushToast } = useAppStore()
+  const me = useOutletContext<{ me: PortalMe }>().me
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Instances"
-        subtitle={`Instances déclarées sur votre licence (${PORTAL_CUSTOMER.limits.instances} autorisée).`}
+        subtitle={`Instances déclarées sur votre licence (${me.instances.length}/${me.maxInstances} utilisées).`}
       />
 
       <div className="space-y-3">
-        {PORTAL_INSTANCES.map((instance) => (
-          <Card key={instance.id} title={instance.name}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Chip variant="subtle" color={instance.status === 'Active' ? 'lime' : 'yellow'}>
-                {instance.status}
-              </Chip>
-              <span className="text-caption-1-medium text-text-tertiary tabular-nums">{instance.id}</span>
-            </div>
-            <p className="mt-2 text-body-2-medium text-text-secondary">
-              Companion {instance.version} · dernier heartbeat {instance.lastHeartbeat}
+        {me.instances.length === 0 ? (
+          <Card>
+            <p className="text-body-2-medium text-text-secondary">
+              Aucune instance activée — importez votre fichier de licence dans Companion
+              (Facturation) pour la déclarer automatiquement.
             </p>
-            <p className="mt-1 text-caption-1-medium text-text-tertiary">{instance.location}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                size="small"
-                onClick={() => pushToast(`Détails de ${instance.name} : santé, compteurs et historique des contacts.`, 'info')}
-              >
-                Voir
-              </Button>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={() =>
-                  pushToast(
-                    'Réinitialisation demandée — un agent KamaLoka validera le changement de serveur avant de libérer le slot.',
-                    'info',
-                  )
-                }
-              >
-                Réinitialiser l'activation
-              </Button>
-            </div>
           </Card>
-        ))}
+        ) : (
+          me.instances.map((instance) => (
+            <Card key={instance.instanceId} title={instance.instanceId.slice(0, 20) + '…'}>
+              <div className="flex flex-wrap items-center gap-2">
+                {instance.revoked ? (
+                  <Chip variant="subtle" color="rose">Révoquée</Chip>
+                ) : instance.lastMode === 'active' ? (
+                  <Chip variant="subtle" color="lime">Active</Chip>
+                ) : (
+                  <Chip variant="subtle" color="yellow">{instance.lastMode ?? 'Inconnu'}</Chip>
+                )}
+                <span className="text-caption-1-medium text-text-tertiary">
+                  Companion {instance.version ?? '?'}
+                </span>
+              </div>
+              <p className="mt-2 text-body-2-medium text-text-secondary">
+                Dernier contact :{' '}
+                {instance.lastSeen ? new Date(instance.lastSeen).toLocaleString('fr-FR') : 'jamais'}
+              </p>
+              {instance.counts && Object.keys(instance.counts).length > 0 && (
+                <p className="mt-1 text-caption-1-medium text-text-tertiary">
+                  {instance.counts.users ?? 0} utilisateurs · {instance.counts.agents ?? 0} agents ·{' '}
+                  {instance.counts.integrations ?? 0} intégrations
+                </p>
+              )}
+              <div className="mt-4">
+                <Button
+                  variant="ghost"
+                  size="small"
+                  onClick={() => {
+                    window.location.href =
+                      'mailto:support@kamaloka.ai?subject=' +
+                      encodeURIComponent(`Réinitialisation d'activation — ${instance.instanceId}`)
+                  }}
+                >
+                  Réinitialiser l'activation
+                </Button>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
 
       <Card title="Déplacer Companion vers un nouveau serveur ?">

@@ -156,6 +156,11 @@ export async function askCompanion(
       hn++
       return spec.clause(hn)
     })
+    // Fragment au format SqlFragment (x.text) — contrat du gate SQL.
+    const hydrateOpt = {
+      text: hOptClauses.length > 0 ? ' AND ' + hOptClauses.join('\n            AND ') : '',
+      params: optSpecs.map((o) => o.value),
+    }
     return await dbh.query<ScoredMemory & { document_title: string | null; excerpt: string | null; text_match: number }>(`
           SELECT m.id, m.type, m.title, m.content, m.scope, m.status, m.confidence, m.importance,
                  m.contributor, m.updated_at::text AS updated_at,
@@ -167,8 +172,8 @@ export async function askCompanion(
           FROM memories m
           WHERE m.id = ANY($1::uuid[])
             AND ${hydrateAccess.text}
-            ${hOptClauses.length > 0 ? `AND ${hOptClauses.join('\n            AND ')}` : ''}
-        `, [ids, ...hydrateAccess.params, like, ...optSpecs.map((o) => o.value)])
+            AND TRUE${hydrateOpt.text}
+        `, [ids, ...hydrateAccess.params, like, ...hydrateOpt.params])
   }
 
   if (engine === 'mem0') {

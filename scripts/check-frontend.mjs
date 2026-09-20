@@ -19,18 +19,10 @@ import path from 'node:path'
 const SRC = path.resolve('src')
 
 /** Pages/composants qui consomment encore des fixtures — travail restant.
- *  Les 6 pages portail sont du mock CONSENTI : le backend du portail est le
- *  Control Center KamaLoka (projet séparé) — à brancher quand il expose son
- *  API. Toute autre entrée ici est une page non terminée. */
-const ALLOWLIST = [
-  'src/pages/portal/dashboard.tsx',
-  'src/pages/portal/license.tsx',
-  'src/pages/portal/downloads.tsx',
-  'src/pages/portal/instances.tsx',
-  'src/pages/portal/invoices.tsx',
-  'src/pages/portal/support.tsx',
-  'src/pages/portal/portal-layout.tsx',
-]
+ *  VIDE : plus aucune page n'importe de fixture. Le portail client dialogue
+ *  avec l'API client du Control Center KamaLoka (services/portal.ts).
+ *  Toute nouvelle entrée ici = une régression vers le mock. */
+const ALLOWLIST = []
 
 function* walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

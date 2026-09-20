@@ -8,9 +8,9 @@
 
 Garde runtime : `ALLOW_MOCK_DATA` (vite define, interdit par défaut) — un
 build de production avec mock activé refuse de démarrer (`src/main.tsx`).
-Gate CI : `scripts/check-frontend.mjs` — l'allowlist ne contient plus que
-les 7 pages portail (mock consenti, backend KamaLoka CC séparé). Toute
-page applicative hors allowlist ne peut plus importer de fixtures.
+Gate CI : `scripts/check-frontend.mjs` — **allowlist vide** : plus aucune
+page n'importe de fixture (le portail dialogue avec l'API client du
+Control Center KamaLoka). Toute régression vers le mock casse le gate.
 
 Légende : ✅ réel et testé · 🟡 partiel (à compléter) · ❌ mock/store ·
 n/a sans objet · 🔍 à vérifier écran par écran.
@@ -52,7 +52,7 @@ n/a sans objet · 🔍 à vérifier écran par écran.
 | --- | --- | --- |
 | `/login` | ✅ réelle (+ forgot-password réel, pré-remplissage gated ALLOW_MOCK_DATA) | |
 | `/setup` | ✅ API réelle | |
-| `/portal/*` | 🟡 mock consenti | Backend = Control Center KamaLoka (projet séparé) — les 7 seules entrées allowlistées |
+| `/portal/*` | ✅ API client du Control Center (token portail par licence) | Connexion par token, licence/instances/factures/versions réelles, .lic retéléchargeable |
 
 ## État de la phase
 
@@ -78,11 +78,12 @@ faudra un seuil plus élevé ou adaptatif — décision produit à prendre.
 ## Gate de sortie de la phase
 
 ```
-Allowlist = 7 fichiers portail uniquement (mock consenti CC KamaLoka)
+Allowlist = 0 (portail inclus — API client du CC KamaLoka)
 0 mock en production (garde runtime + build)
 0 bouton mort · 0 faux CRUD · 0 donnée métier hardcodée
-test:frontend-real-data ✅ 13/13 · build ✅ · test:battery ✅
-test:handover-e2e ✅ · test:handover-ui ✅
+test:frontend-real-data ✅ 15/15 · build ✅ · test:battery ✅
+test:handover-e2e ✅ · test:handover-ui ✅ · golden-e2e ✅
+CC E2E ✅ 20/20 (loop commercial + portail navigateur)
 ```
 
 Golden E2E : `npm run test:golden-e2e` — 11 vérifications ✅

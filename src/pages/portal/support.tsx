@@ -1,24 +1,26 @@
+import { useOutletContext } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
 import { Button } from '@/components/base/buttons/button'
 import { useAppStore } from '@/store/app-store'
 import { adaptIcon } from '@/components/ui/huge-icon'
-import { BookIcon, RefreshIcon, Message01Icon } from '@/lib/icons'
-import { PORTAL_INSTANCES, INSTALLED_VERSION } from '@/data/portal'
+import { BookIcon, Message01Icon } from '@/lib/icons'
+import type { PortalMe } from '@/services/portal'
 
-/** Portail client — support : ticket, documentation, diagnostic technique. */
+/** Portail client — support : ticket, documentation, diagnostic réel. */
 export function PortalSupportPage() {
   const { pushToast } = useAppStore()
-  const instance = PORTAL_INSTANCES[0]
+  const me = useOutletContext<{ me: PortalMe }>().me
+  const instance = me.instances[0]
 
-  const diagnostics = [
-    ['Version Companion', INSTALLED_VERSION],
-    ['Instance', instance.id],
-    ['Base de données', 'OK'],
-    ['Redis / files', 'OK'],
-    ['Moteur mémoire (Mem0)', 'OK'],
-    ['Activepieces', 'OK'],
-  ] as const
+  const diagnostics: [string, string][] = instance
+    ? [
+        ['Version Companion', instance.version ?? '—'],
+        ['Instance', instance.instanceId],
+        ['Dernier contact (heartbeat)', instance.lastSeen ? new Date(instance.lastSeen).toLocaleString('fr-FR') : '—'],
+        ['Mode remonté', instance.lastMode ?? '—'],
+      ]
+    : [['Instance', 'aucune instance activée sur cette licence']]
 
   return (
     <div className="space-y-4">
@@ -34,21 +36,28 @@ export function PortalSupportPage() {
             étendu pour Enterprise).
           </p>
           <div className="mt-3">
-            <Button size="small" onClick={() => pushToast('Ticket ouvert — référence SUP-2026-0114.', 'success')}>
+            <Button
+              size="small"
+              onClick={() => {
+                window.location.href =
+                  'mailto:support@kamaloka.ai?subject=' +
+                  encodeURIComponent(`Support Companion — ${me.customer} (${me.licenseId})`)
+              }}
+            >
               Ouvrir un ticket
             </Button>
           </div>
         </Card>
 
-        <Card title="Diagnostic automatique">
+        <Card title="Diagnostic de votre instance">
           <p className="text-body-2-medium text-text-secondary">
-            Joint à votre ticket — uniquement des indicateurs techniques :
+            Indicateurs techniques remontés par le heartbeat de votre instance :
           </p>
           <dl className="mt-2 space-y-1">
             {diagnostics.map(([label, value]) => (
               <div key={label} className="flex items-baseline justify-between gap-3">
                 <dt className="text-caption-1-medium text-text-tertiary">{label}</dt>
-                <dd className="text-body-2-medium text-text-primary tabular-nums">{value}</dd>
+                <dd className="max-w-[55%] truncate text-body-2-medium text-text-primary tabular-nums">{value}</dd>
               </div>
             ))}
           </dl>
@@ -59,11 +68,17 @@ export function PortalSupportPage() {
 
         <Card title="Documentation">
           <p className="text-body-2-medium text-text-secondary">
-            Installation, mises à jour, sauvegardes, intégrations et bonnes pratiques.
+            Installation, mises à jour, sauvegardes, intégrations et bonnes pratiques — fournie
+            avec votre package Companion.
           </p>
           <div className="mt-3">
-            <Button variant="secondary" size="small" leadingIcon={adaptIcon(BookIcon, 20)} onClick={() => pushToast('Documentation Companion — docs.companion.kamaloka.ai', 'info')}>
-              Ouvrir la documentation
+            <Button
+              variant="secondary"
+              size="small"
+              leadingIcon={adaptIcon(BookIcon, 20)}
+              onClick={() => pushToast('Documentation incluse dans le package (répertoire docs/) — et support@kamaloka.ai pour toute question.', 'info')}
+            >
+              Documentation
             </Button>
           </div>
         </Card>
@@ -77,30 +92,13 @@ export function PortalSupportPage() {
               variant="secondary"
               size="small"
               leadingIcon={adaptIcon(Message01Icon, 20)}
-              onClick={() => pushToast('Un agent KamaLoka va vous répondre sur votre canal habituel.', 'info')}
+              onClick={() => { window.location.href = 'mailto:support@kamaloka.ai' }}
             >
               Nous écrire
             </Button>
           </div>
         </Card>
       </div>
-
-      <Card title="Auto-diagnostic">
-        <p className="text-body-2-medium text-text-secondary">
-          Relancer un contrôle complet de votre instance (santé des services, connexions,
-          derniers heartbeats) sans ouvrir de ticket.
-        </p>
-        <div className="mt-3">
-          <Button
-            variant="ghost"
-            size="small"
-            leadingIcon={adaptIcon(RefreshIcon, 20)}
-            onClick={() => pushToast('Diagnostic relancé — tous les services répondent normalement.', 'success')}
-          >
-            Relancer un diagnostic
-          </Button>
-        </div>
-      </Card>
     </div>
   )
 }
