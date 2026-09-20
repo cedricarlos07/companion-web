@@ -73,6 +73,7 @@ export default function App() {
             <Route path="/sources/new" element={<NewSourcePage />} />
             <Route path="/knowledge-risk" element={<KnowledgeRiskPage />} />
             <Route path="/handovers" element={<HandoversPage />} />
+            <Route path="/handovers/new" element={<NewHandoverPage />} />
             <Route path="/handovers/new/:employeeId" element={<NewHandoverPage />} />
             <Route path="/handovers/:id" element={<HandoverDetailPage />} />
             <Route path="/handovers/:id/interview" element={<InterviewPage />} />
