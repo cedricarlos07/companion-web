@@ -42,6 +42,99 @@ async function call<T>(path: string, init?: RequestInit): Promise<T | null> {
   }
 }
 
+/* ------------------------- Écritures (avec erreurs) ------------------------ */
+
+/** Résultat d'une commande d'écriture : succès avec données, ou message
+ *  d'erreur serveur à afficher (le corps { error } de l'API). */
+export type CommandResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number }
+
+async function command<T>(path: string, body: unknown, method = 'POST'): Promise<CommandResult<T>> {
+  try {
+    const res = await fetch(`/api${path}`, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null
+    if (!res.ok) return { ok: false, error: data?.error ?? `Erreur ${res.status}`, status: res.status }
+    return { ok: true, data: (data ?? {}) as T }
+  } catch {
+    return { ok: false, error: 'Erreur réseau — la requête n\'a pas abouti.', status: 0 }
+  }
+}
+
+/* ------------------------------ Agents (API) ------------------------------- */
+
+/** Ligne agents telle que servie par l'API (snake_case). */
+export interface AgentRow {
+  id: string
+  key: string
+  name: string
+  description: string | null
+  goal: string
+  status: string
+  autonomy: string
+  memory_scopes: string[]
+  allowed_skills: string[]
+  allowed_tools: string[]
+  model_provider: string
+  model: string | null
+  max_run_tokens: number
+  max_daily_tokens: number
+  created_at: string
+  updated_at: string
+}
+
+/** Ligne agents enrichie par GET /agents (compteurs de runs). */
+export interface AgentListRow extends AgentRow {
+  runs_total: number
+  runs_active: number
+  tokens_total: number
+}
+
+export interface AgentRunRow {
+  id: string
+  goal: string
+  skill: string | null
+  status: string
+  prompt_tokens: number
+  completion_tokens: number
+  estimated_cost: string | number | null
+  /** Objet JSONB { passed, score, reasons, retryable } écrit par runs.ts. */
+  verifier: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface AgentTriggerRow {
+  id: string
+  event_type: string
+  skill: string
+  enabled: boolean
+  rate_limit_per_hour: number
+}
+
+export interface AgentCatalog {
+  skills: { id: string; workflow: string; label: string }[]
+  tools: { id: string; label: string }[]
+  memoryScopes: {
+    global: { id: string; label: string }[]
+    departments: { id: string; label: string }[]
+    roles: { id: string; label: string }[]
+  }
+}
+
+export interface AgentCreateInput {
+  name: string
+  description?: string
+  goal: string
+  autonomy: string
+  memoryScopes?: string[]
+  allowedSkills?: string[]
+  allowedTools?: string[]
+  maxRunTokens?: number
+}
+
 /* ------------------------------ Mappers ---------------------------------- */
 
 export function mapEmployee(row: Record<string, unknown>): Employee {
@@ -351,5 +444,44 @@ export const api = {
   async audit(kind?: string) {
     const res = await call<{ events: Record<string, unknown>[] }>(`/audit${kind && kind !== 'all' ? `?kind=${kind}` : ''}`)
     return res?.events ?? null
+  },
+
+  /* -------------------------------- Agents --------------------------------- */
+
+  async agents() {
+    return call<{ agents: AgentListRow[] }>('/agents')
+  },
+
+  async agent(id: string) {
+    return call<{
+      agent: AgentRow
+      runs: AgentRunRow[]
+      usage: { runs_total: number; runs_active: number; tokens_total: number }
+      triggers: AgentTriggerRow[]
+    }>(`/agents/${id}`)
+  },
+
+  async agentCatalog() {
+    return call<AgentCatalog>('/agents/catalog')
+  },
+
+  createAgent(input: AgentCreateInput) {
+    return command<{ agent: AgentRow }>('/agents', input)
+  },
+
+  setAgentStatus(id: string, status: 'idle' | 'running' | 'paused') {
+    return command<{ ok: boolean }>(`/agents/${id}/status`, { status })
+  },
+
+  setAgentLimits(id: string, maxRunTokens: number) {
+    return command<{ ok: boolean }>(`/agents/${id}/limits`, { maxRunTokens })
+  },
+
+  startAgentRun(id: string, input: { skill: string; goal?: string; inputData?: Record<string, unknown> }) {
+    return command<{ run?: { id: string }; mastraRunId?: string; status?: string }>(`/agents/${id}/runs`, input)
+  },
+
+  toggleTrigger(id: string) {
+    return command<{ ok: boolean }>(`/triggers/${id}/toggle`, {})
   },
 }

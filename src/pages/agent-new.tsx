@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Card } from '@/components/common/stat-card'
@@ -17,83 +17,97 @@ import {
   ArrowLeft01Icon,
   ToolsIcon,
   WorkflowIcon,
+  MoneyIcon,
 } from '@/lib/icons'
+import { api, type AgentCatalog } from '@/services/api'
 import { useAppStore } from '@/store/app-store'
 import { cx } from '@/utils/cx'
-import type { AutonomyLevel } from '@/types'
 
-const STEPS = ['Identité', 'Accès mémoire', 'Compétences', 'Outils', 'Autonomie', 'Permissions'] as const
+const STEPS = ['Identité', 'Accès mémoire', 'Compétences', 'Outils', 'Autonomie', 'Budget'] as const
 
-const AUTONOMY_OPTIONS: { id: AutonomyLevel; name: string; detail: string }[] = [
+const AUTONOMY_OPTIONS: { id: string; name: string; detail: string }[] = [
   { id: 'assistant', name: 'ASSISTANT', detail: 'Recommande des actions mais ne les exécute pas.' },
   { id: 'copilot', name: 'COPILOTE', detail: 'Prépare des actions et demande une validation lorsque nécessaire.' },
   { id: 'autopilot', name: 'PILOTE AUTO', detail: 'Exécute les actions pré-autorisées dans les limites définies.' },
 ]
 
-const SKILLS = [
-  'Contexte client',
-  'Préparation d’emails',
-  'Suivi de pipeline',
-  'Préparation d’appels d’offres',
-  'Extraction de connaissances',
-  'Veille de procédures',
-]
-
-const TOOLS = ['CRM', 'Gmail', 'Calendar', 'Google Drive', 'Notion', 'Fichiers locaux']
-
-const ACCESS_SCOPES = [
-  { id: 'company', label: 'Entreprise entière' },
-  { id: 'sales', label: 'Département Commercial' },
-  { id: 'role-brain', label: 'Role Brain — Commercial' },
-  { id: 'finance', label: 'Finance' },
-  { id: 'hr', label: 'RH' },
-]
-
-const PERMISSIONS = [
-  'Préparer un email',
-  'Créer une tâche',
-  'Mettre à jour le CRM',
-  'Envoyer un email',
-  'Supprimer des données',
-  'Signer un contrat',
-]
+const MIN_TOKENS = 1000
+const MAX_TOKENS = 2_000_000
 
 export function NewAgentPage() {
   const navigate = useNavigate()
   const { pushToast } = useAppStore()
+  const [catalog, setCatalog] = useState<AgentCatalog | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [goal, setGoal] = useState('')
-  const [access, setAccess] = useState<Record<string, boolean>>({
-    company: true,
-    sales: true,
-    'role-brain': true,
-    finance: false,
-    hr: false,
-  })
-  const [skills, setSkills] = useState<string[]>(['Contexte client', 'Préparation d’emails'])
-  const [tools, setTools] = useState<string[]>(['CRM', 'Gmail'])
-  const [autonomy, setAutonomy] = useState<AutonomyLevel>('copilot')
-  const [perms, setPerms] = useState<Record<string, 'automatic' | 'approval' | 'blocked'>>({
-    'Préparer un email': 'automatic',
-    'Créer une tâche': 'automatic',
-    'Mettre à jour le CRM': 'automatic',
-    'Envoyer un email': 'approval',
-    'Supprimer des données': 'blocked',
-    'Signer un contrat': 'blocked',
-  })
+  const [scopes, setScopes] = useState<string[]>(['company'])
+  const [skills, setSkills] = useState<string[]>([])
+  const [tools, setTools] = useState<string[]>(['search_memory'])
+  const [autonomy, setAutonomy] = useState('copilot')
+  const [maxTokens, setMaxTokens] = useState('20000')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const step1Valid = name.trim().length > 1
+  useEffect(() => {
+    api.agentCatalog().then((c) => {
+      if (!c) setCatalogError('Catalogue indisponible — impossible de charger les skills et outils réels.')
+      else setCatalog(c)
+    })
+  }, [])
 
-  function create() {
-    pushToast(`${name || 'Nouvel agent'} créé — statut : inactif jusqu'à sa première tâche.`)
-    navigate('/agents')
+  const scopeOptions = useMemo(
+    () =>
+      catalog
+        ? [...catalog.memoryScopes.global, ...catalog.memoryScopes.departments, ...catalog.memoryScopes.roles]
+        : [],
+    [catalog],
+  )
+  const skillOptions = catalog?.skills ?? []
+  const toolOptions = catalog?.tools ?? []
+
+  const step1Valid = name.trim().length > 1 && goal.trim().length >= 4
+  const budgetValid = Number.isFinite(Number(maxTokens)) && Number(maxTokens) >= MIN_TOKENS && Number(maxTokens) <= MAX_TOKENS
+  const canCreate = step1Valid && budgetValid && !submitting
+
+  async function create() {
+    if (!canCreate) return
+    setError(null)
+    setSubmitting(true)
+    const res = await api.createAgent({
+      name: name.trim(),
+      description: description.trim() || undefined,
+      goal: goal.trim(),
+      autonomy,
+      memoryScopes: scopes,
+      allowedSkills: skills,
+      allowedTools: tools,
+      maxRunTokens: Math.floor(Number(maxTokens)),
+    })
+    setSubmitting(false)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    pushToast(`${res.data.agent.name} créé — statut : inactif jusqu'à sa première tâche.`, 'success')
+    navigate(`/agents/${res.data.agent.id}`)
   }
+
+  const catalogueAttente = (
+    <p className="text-body-2-medium text-text-tertiary">Chargement du catalogue réel…</p>
+  )
 
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Créer un agent" subtitle="Un agent hérite de la mémoire autorisée — jamais plus." />
+
+      {catalogError && (
+        <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {catalogError}
+        </div>
+      )}
 
       {/* Stepper */}
       <ol className="mb-6 flex flex-wrap gap-1.5" aria-label="Étapes de création">
@@ -148,16 +162,21 @@ export function NewAgentPage() {
               <h2 className="text-headline-medium text-text-primary">Accès à la mémoire</h2>
             </div>
             <p className="text-body-2-regular text-text-secondary">
-              L'agent ne verra que les périmètres autorisés ci-dessous.
+              L'agent ne verra que les périmètres autorisés ci-dessous — les périmètres réels de votre
+              organisation.
             </p>
-            {ACCESS_SCOPES.map((s) => (
-              <CheckboxCard
-                key={s.id}
-                title={s.label}
-                isSelected={access[s.id]}
-                onChange={(v) => setAccess((a) => ({ ...a, [s.id]: v }))}
-              />
-            ))}
+            {catalog === null ? (
+              catalogueAttente
+            ) : (
+              scopeOptions.map((s) => (
+                <CheckboxCard
+                  key={s.id}
+                  title={s.label}
+                  isSelected={scopes.includes(s.id)}
+                  onChange={(v) => setScopes((list) => (v ? [...list, s.id] : list.filter((x) => x !== s.id)))}
+                />
+              ))
+            )}
           </section>
         )}
 
@@ -167,18 +186,29 @@ export function NewAgentPage() {
               <HugeIcon icon={SparklesIcon} size="md" className="text-accent-500" />
               <h2 className="text-headline-medium text-text-primary">Compétences</h2>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {SKILLS.map((s) => (
-                <label key={s} className="flex items-center gap-2.5 rounded-xl border border-border-button-default px-3.5 py-2.5">
-                  <AriaCheckbox
-                    isSelected={skills.includes(s)}
-                    onChange={(v) => setSkills((list) => (v ? [...list, s] : list.filter((x) => x !== s)))}
-                    aria-label={s}
-                  />
-                  <span className="text-body-2-medium text-text-primary">{s}</span>
-                </label>
-              ))}
-            </div>
+            <p className="text-body-2-regular text-text-secondary">
+              Chaque compétence est un workflow réel — une compétence non cochée ne pourra jamais être
+              exécutée par cet agent.
+            </p>
+            {catalog === null ? (
+              catalogueAttente
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {skillOptions.map((s) => (
+                  <label key={s.id} className="flex items-center gap-2.5 rounded-xl border border-border-button-default px-3.5 py-2.5">
+                    <AriaCheckbox
+                      isSelected={skills.includes(s.id)}
+                      onChange={(v) => setSkills((list) => (v ? [...list, s.id] : list.filter((x) => x !== s.id)))}
+                      aria-label={s.label}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-body-2-medium text-text-primary">{s.label}</span>
+                      <span className="block truncate text-caption-1-medium text-text-tertiary">{s.id}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -189,20 +219,28 @@ export function NewAgentPage() {
               <h2 className="text-headline-medium text-text-primary">Outils</h2>
             </div>
             <p className="text-body-2-regular text-text-secondary">
-              Chaque outil est une intégration réelle — l'agent ne peut pas en utiliser d'autres.
+              Chaque outil est policy-gated : même autorisé, un outil à risque exige une validation
+              humaine. L'agent ne peut pas en utiliser d'autres.
             </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {TOOLS.map((t) => (
-                <label key={t} className="flex items-center gap-2.5 rounded-xl border border-border-button-default px-3.5 py-2.5">
-                  <AriaCheckbox
-                    isSelected={tools.includes(t)}
-                    onChange={(v) => setTools((list) => (v ? [...list, t] : list.filter((x) => x !== t)))}
-                    aria-label={t}
-                  />
-                  <span className="text-body-2-medium text-text-primary">{t}</span>
-                </label>
-              ))}
-            </div>
+            {catalog === null ? (
+              catalogueAttente
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {toolOptions.map((t) => (
+                  <label key={t.id} className="flex items-center gap-2.5 rounded-xl border border-border-button-default px-3.5 py-2.5">
+                    <AriaCheckbox
+                      isSelected={tools.includes(t.id)}
+                      onChange={(v) => setTools((list) => (v ? [...list, t.id] : list.filter((x) => x !== t.id)))}
+                      aria-label={t.label}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-body-2-medium text-text-primary">{t.label}</span>
+                      <span className="block truncate text-caption-1-medium text-text-tertiary">{t.id}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -245,44 +283,43 @@ export function NewAgentPage() {
         )}
 
         {step === 5 && (
-          <section className="space-y-2">
-            <div className="mb-3 flex items-center gap-2.5">
-              <HugeIcon icon={ShieldCheckIcon} size="md" className="text-accent-500" />
-              <h2 className="text-headline-medium text-text-primary">Permissions d'action</h2>
+          <section className="space-y-4">
+            <div className="flex items-center gap-2.5">
+              <HugeIcon icon={MoneyIcon} size="md" className="text-accent-500" />
+              <h2 className="text-headline-medium text-text-primary">Budget &amp; garde-fous</h2>
             </div>
-            {PERMISSIONS.map((p) => (
-              <div
-                key={p}
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-border-button-default px-3.5 py-2.5"
-              >
-                <span className="min-w-0 flex-1 text-body-2-medium text-text-primary">{p}</span>
-                <div className="flex gap-1">
-                  {(['automatic', 'approval', 'blocked'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setPerms((m) => ({ ...m, [p]: mode }))}
-                      aria-pressed={perms[p] === mode}
-                      className={cx(
-                        'rounded-md px-2 py-1 text-caption-1-medium transition-colors',
-                        perms[p] === mode
-                          ? mode === 'automatic'
-                            ? 'bg-status-lime-background text-status-lime-text'
-                            : mode === 'approval'
-                              ? 'bg-status-yellow-background text-status-yellow-text'
-                              : 'bg-status-rose-background text-status-rose-text'
-                          : 'text-text-tertiary hover:bg-background-primary-hover',
-                      )}
-                    >
-                      {mode === 'automatic' ? 'Automatique' : mode === 'approval' ? 'Validation' : 'Bloqué'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+            <Input
+              label="Budget maximum par run (tokens)"
+              value={maxTokens}
+              onChange={setMaxTokens}
+              placeholder={`entre ${MIN_TOKENS.toLocaleString('fr-FR')} et ${MAX_TOKENS.toLocaleString('fr-FR')}`}
+            />
+            {!budgetValid && (
+              <p className="text-caption-1-medium text-text-error-primary">
+                Le budget doit être un entier entre {MIN_TOKENS.toLocaleString('fr-FR')} et{' '}
+                {MAX_TOKENS.toLocaleString('fr-FR')}.
+              </p>
+            )}
+            <div className="rounded-xl bg-background-secondary-default p-3.5">
+              <p className="flex items-center gap-2 text-caption-1-semibold text-text-secondary">
+                <HugeIcon icon={ShieldCheckIcon} size="xs" />
+                Garde-fous non négociables
+              </p>
+              <ul className="mt-1.5 space-y-1 text-caption-1-medium text-text-tertiary">
+                <li>· Un plafond quotidien de tokens s'applique en plus du budget par run.</li>
+                <li>· Les outils à risque passent toujours par la validation humaine (policy layer).</li>
+                <li>· L'agent ne peut jamais élargir ses propres permissions.</li>
+              </ul>
+            </div>
           </section>
         )}
       </Card>
+
+      {error && (
+        <div role="alert" className="mt-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">
+          {error}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-between">
         <Button
@@ -297,7 +334,9 @@ export function NewAgentPage() {
             Continuer
           </Button>
         ) : (
-          <Button onClick={create}>Créer l'agent</Button>
+          <Button onClick={() => void create()} disabled={!canCreate}>
+            {submitting ? 'Création…' : 'Créer l\'agent'}
+          </Button>
         )}
       </div>
     </div>

@@ -22,7 +22,6 @@ const SRC = path.resolve('src')
  *  Retirer une ligne = page branchée sur l'API réelle et auditée. */
 const ALLOWLIST = [
   'src/pages/activity.tsx',
-  'src/pages/agent-detail.tsx',
   'src/pages/automations.tsx',
   'src/pages/brain.tsx',
   'src/pages/home.tsx',

@@ -35,9 +35,9 @@ n/a sans objet · 🔍 à vérifier écran par écran.
 | `/handovers/:id/interview` | ✅ gaps réels | ✅ réponses persistées | 🔍 | ✅ | ✅ | ✅ | ✅ handover-ui |
 | `/onboarding` | 🟡 | n/a | 🔍 | ❌ | ✅ | n/a | ❌ |
 | `/onboarding/:id` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `/agents` | ✅ liste | 🟡 (status) | ✅ role gate | ❌ | ✅ | 🟡 | ✅ battery |
-| `/agents/new` | ❌ store | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
-| `/agents/:id` | ❌ mock | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `/agents` | ✅ liste + compteurs runs/tokens | ✅ status (POST /status, anti double-clic, erreur affichée) | ✅ role gate serveur | ✅ | ✅ | ✅ agent.status_changed | ✅ battery |
+| `/agents/new` | ✅ catalogue réel (skills/tools/scopes de l'org) | ✅ POST /agents (validation, anti double-submit) | ✅ owner/admin serveur | ✅ | ✅ | ✅ agent.created | ✅ battery (scénario D) |
+| `/agents/:id` | ✅ agent + runs + triggers + usage | ✅ status/kill switch, run réel, budget (/limits), triggers toggle | ✅ role gates serveur | ✅ | ✅ | ✅ | ✅ battery (scénario D) |
 | `/automations` | ❌ store | ❌ | 🔍 | ❌ | ❌ | ❌ | ❌ |
 | `/approvals` | ✅ GET /approvals | ✅ approve/reject (anti double-clic, erreur 400 affichée) | 🔍 rôle gate serveur ✓ | ✅ | ✅ (persisté, vérifié E2E) | ✅ serveur | ✅ cycle E2E prouvé |
 | `/activity` | 🟡 GET /audit | n/a | 🔍 | ❌ | ✅ | ✅ | ❌ |

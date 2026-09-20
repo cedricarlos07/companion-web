@@ -3,9 +3,39 @@ import type { DbHandle } from '../db/client.js'
 import { authRequired, requireRole } from '../auth.js'
 import { audit } from '../audit.js'
 import { licenseGate } from '../services/license-mode.js'
+import { agents as agentsTable } from '../db/schema.js'
 import { startAgentRun, resumeAgentRun, rememberWorkflowId } from './runs.js'
-import { dispatchEvent } from './triggers.js'
-import { AGENT_SEEDS, primaryOrganizationId } from './seed-agents.js'
+import { dispatchEvent, SKILL_WORKFLOW } from './triggers.js'
+import { COMPANION_TOOLS } from './tools.js'
+import { primaryOrganizationId } from './seed-agents.js'
+
+/** Libellés FR du catalogue — la référence technique reste l'id du skill/tool. */
+const SKILL_LABELS: Record<string, string> = {
+  handover_employee: 'Préparer un départ (handover)',
+  interview_employee: "Conduire l'entretien de départ",
+  onboard_employee: "Générer l'onboarding d'un nouvel arrivant",
+  resolve_contradiction: 'Résoudre une contradiction',
+  capture_knowledge: 'Extraire des connaissances',
+  draft_followup: 'Rédiger une relance client',
+  research_customer: 'Rechercher un contexte client',
+  prepare_meeting: 'Préparer une réunion',
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  search_memory: 'Recherche en mémoire',
+  get_employee_context: 'Contexte employé',
+  get_role_context: 'Contexte rôle (Role Brain)',
+  get_company_context: 'Contexte entreprise',
+  get_project_context: 'Contexte projets',
+  get_knowledge_gaps: 'Lacunes de connaissances',
+  create_memory_candidate: 'Proposer une connaissance',
+  create_handover: 'Créer un handover',
+  create_onboarding: 'Créer un onboarding',
+  create_task: 'Créer une tâche',
+  request_approval: "Demander une approbation",
+}
+
+const AUTONOMIES = ['assistant', 'copilot', 'autopilot']
 
 /** Routes de la couche agentique — branchées sur Mastra via la policy layer. */
 export function buildAgentRouter(dbh: DbHandle): Router {
@@ -24,6 +54,97 @@ export function buildAgentRouter(dbh: DbHandle): Router {
     res.json({ agents: rows })
   })
 
+  /* ------------------------- Catalogue de configuration ------------------- */
+
+  // Seule source des skills/tools réellement exécutables : le wizard de
+  // création n'affiche rien qui ne soit branché à un workflow Mastra ou à un
+  // tool policy-gated. Les périmètres mémoire proposés sont ceux de l'org.
+  router.get('/agents/catalog', authRequired(dbh), async (req, res) => {
+    const departments = await dbh.query<{ id: string; name: string }>(
+      `SELECT id, name FROM departments WHERE organization_id = $1::uuid ORDER BY name`, [req.user!.organizationId],
+    )
+    const roles = await dbh.query<{ id: string; title: string }>(
+      `SELECT id, title FROM roles WHERE organization_id = $1::uuid ORDER BY title`, [req.user!.organizationId],
+    )
+    res.json({
+      skills: Object.entries(SKILL_WORKFLOW).map(([id, workflow]) => ({
+        id, workflow, label: SKILL_LABELS[id] ?? id,
+      })),
+      tools: Object.keys(COMPANION_TOOLS).map((id) => ({ id, label: TOOL_LABELS[id] ?? id })),
+      memoryScopes: {
+        global: [
+          { id: 'company', label: 'Mémoire entreprise' },
+          { id: 'role', label: 'Mémoire de rôle — tous rôles' },
+          { id: 'department', label: 'Mémoire de département — tous départements' },
+          { id: 'employee', label: 'Mémoire employé (cible du run)' },
+        ],
+        departments: departments.map((d) => ({ id: `department:${d.id}`, label: `Département ${d.name}` })),
+        roles: roles.map((r) => ({ id: `role:${r.id}`, label: `Rôle ${r.title}` })),
+      },
+    })
+  })
+
+  /* ------------------------------- Création -------------------------------- */
+
+  router.post('/agents', authRequired(dbh), requireRole('owner', 'admin'), async (req, res) => {
+    const { name, description, goal, autonomy, memoryScopes, allowedSkills, allowedTools, maxRunTokens } = req.body as {
+      name?: string; description?: string; goal?: string; autonomy?: string
+      memoryScopes?: string[]; allowedSkills?: string[]; allowedTools?: string[]; maxRunTokens?: number
+    }
+    const trimmedName = (name ?? '').trim()
+    const trimmedGoal = (goal ?? '').trim()
+    if (trimmedName.length < 2) return res.status(400).json({ error: 'nom requis (2 caractères minimum)' })
+    if (trimmedGoal.length < 4) return res.status(400).json({ error: 'objectif requis (4 caractères minimum)' })
+    if (!AUTONOMIES.includes(autonomy ?? '')) {
+      return res.status(400).json({ error: `autonomie invalide — attendu : ${AUTONOMIES.join(', ')}` })
+    }
+    const skills = allowedSkills ?? []
+    const unknownSkill = skills.find((s) => !(s in SKILL_WORKFLOW))
+    if (unknownSkill) return res.status(400).json({ error: `skill inconnue (aucun workflow) : ${unknownSkill}` })
+    const tools = allowedTools ?? []
+    const unknownTool = tools.find((t) => !(t in COMPANION_TOOLS))
+    if (unknownTool) return res.status(400).json({ error: `outil inconnu : ${unknownTool}` })
+    const scopes = memoryScopes ?? []
+    if (scopes.some((s) => typeof s !== 'string' || s.length === 0 || s.length > 120) || scopes.length > 60) {
+      return res.status(400).json({ error: 'périmètres mémoire invalides' })
+    }
+    const budget = Math.floor(Number(maxRunTokens ?? 20000))
+    if (!Number.isFinite(budget) || budget < 1000 || budget > 2_000_000) {
+      return res.status(400).json({ error: 'maxRunTokens doit être un entier entre 1 000 et 2 000 000' })
+    }
+
+    // key unique par org : slug du nom, suffixé en cas de collision.
+    const base = trimmedName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent'
+    const existing = await dbh.query<{ key: string }>(
+      `SELECT key FROM agents WHERE organization_id = $1::uuid AND key LIKE $2`, [req.user!.organizationId, `${base}%`],
+    )
+    const taken = new Set(existing.map((r) => r.key))
+    let key = base
+    for (let i = 2; taken.has(key); i++) key = `${base}-${i}`
+
+    const [agent] = await dbh.db
+      .insert(agentsTable)
+      .values({
+        organizationId: req.user!.organizationId,
+        key,
+        name: trimmedName,
+        description: (description ?? '').trim() || null,
+        goal: trimmedGoal,
+        status: 'idle',
+        autonomy: autonomy!,
+        memoryScopes: scopes,
+        allowedSkills: skills,
+        allowedTools: tools,
+        maxRunTokens: budget,
+      })
+      .returning()
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'agent.created', targetType: 'agent', targetId: String(agent.id),
+      detail: { name: trimmedName, autonomy, skills, tools, scopes, maxRunTokens: budget },
+    })
+    res.status(201).json({ agent })
+  })
+
   router.get('/agents/:id', authRequired(dbh), async (req, res) => {
     const id = req.params.id as string
     const agent = (
@@ -34,7 +155,20 @@ export function buildAgentRouter(dbh: DbHandle): Router {
       `SELECT id, goal, skill, status, prompt_tokens, completion_tokens, estimated_cost, verifier, created_at::text AS created_at
        FROM agent_runs WHERE agent_id = $1::uuid ORDER BY created_at DESC LIMIT 15`, [id],
     )
-    res.json({ agent, runs })
+    const usage = (
+      await dbh.query<{ runs_total: number; runs_active: number; tokens_total: number }>(
+        `SELECT (SELECT count(*) FROM agent_runs r WHERE r.agent_id = $1::uuid)::int AS runs_total,
+                (SELECT count(*) FROM agent_runs r WHERE r.agent_id = $1::uuid AND r.status IN ('running','waiting_approval','waiting_input'))::int AS runs_active,
+                (SELECT COALESCE(SUM(r.prompt_tokens + r.completion_tokens), 0) FROM agent_runs r WHERE r.agent_id = $1::uuid)::int AS tokens_total`, [id],
+      )
+    )[0]
+    const triggers = agent.key
+      ? await dbh.query(
+          `SELECT id, event_type, skill, enabled, rate_limit_per_hour FROM triggers
+           WHERE organization_id = $1::uuid AND agent_key = $2 ORDER BY event_type`, [req.user!.organizationId, agent.key],
+        )
+      : []
+    res.json({ agent, runs, usage: usage ?? { runs_total: 0, runs_active: 0, tokens_total: 0 }, triggers })
   })
 
   router.post('/agents/:id/status', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
@@ -51,26 +185,34 @@ export function buildAgentRouter(dbh: DbHandle): Router {
   /* -------------------------------- Runs ---------------------------------- */
 
   router.post('/agents/:id/runs', authRequired(dbh), requireRole('owner', 'admin', 'manager'), licenseGate(dbh), async (req, res) => {
-    const { agentKey, workflowId, goal, skill, inputData } = req.body as {
-      agentKey?: string; workflowId?: string; goal?: string; skill?: string; inputData?: Record<string, unknown>
+    const { goal, skill, inputData } = req.body as {
+      goal?: string; skill?: string; inputData?: Record<string, unknown>
     }
     const agentRow = (
-      await dbh.query<{ key: string }>(
-        `SELECT key FROM agents WHERE id = $1::uuid AND organization_id = $2::uuid`,
+      await dbh.query<{ key: string; allowed_skills: string[] }>(
+        `SELECT key, allowed_skills FROM agents WHERE id = $1::uuid AND organization_id = $2::uuid`,
         [req.params.id, req.user!.organizationId],
       )
     )[0]
     if (!agentRow) return res.status(404).json({ error: 'agent introuvable' })
-    const seed = AGENT_SEEDS.find((a) => a.key === agentRow.key)
-    if (seed && !seed.allowedSkills.includes(skill ?? '')) {
+    // Source de vérité : la table. Les seeds appliquaient cette vérification,
+    // les agents créés via l'API doivent passer par la même barrière.
+    const allowedSkills = agentRow.allowed_skills ?? []
+    if (!allowedSkills.includes(skill ?? '')) {
       return res.status(403).json({ error: `skill "${skill}" non autorisée pour cet agent` })
+    }
+    // Le workflow vient du mapping serveur skill → workflow ; le client ne
+    // peut plus en imposer un arbitraire sans skill correspondant.
+    const workflowId = req.body.workflowId ?? SKILL_WORKFLOW[skill ?? ''] ?? ''
+    if (!workflowId) {
+      return res.status(400).json({ error: `skill "${skill}" sans workflow connu — fournir workflowId` })
     }
 
     try {
       const result = await startAgentRun(dbh, {
         organizationId: req.user!.organizationId,
         agentKey: agentRow.key,
-        workflowId: workflowId ?? '',
+        workflowId,
         goal: goal ?? `Exécution ${skill ?? 'workflow'}`,
         skill,
         initiatorUserId: req.user!.id,
