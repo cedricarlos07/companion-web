@@ -3,6 +3,8 @@
 > Tout ce que vous pouvez faire dans l'application, module par module.
 > Guide maintenu par KamaLoka : toute modification d'écran passe par une
 > mise à jour de ce document (vérifiée à chaque release).
+> L'installation du serveur et la configuration initiale sont décrites dans
+> le [guide de déploiement](deploiement.md).
 
 Companion transforme les documents, emails et échanges de votre entreprise
 en une **mémoire exploitable** : vous posez des questions, vous obtenez des
