@@ -1,5 +1,8 @@
 # Changelog — Companion
 
+## v1.0.9 (2026-09-21)
+
+Publication courante — instance companionbrain.online mise à jour.
 ## v1.0.8 (2026-09-21)
 
 Image Docker : le site public (landing, docs, démo, mentions légales) est
