@@ -90,22 +90,32 @@ avec reverse proxy et HTTPS intégrés.
 
 ---
 
-## 4. Coolify
+## 4. Coolify — la voie la plus simple (1 ressource, zéro compose)
 
-[Coolify](https://coolify.io) fonctionne comme Dokploy (auto-hébergé,
-HTTPS automatique).
+[Coolify](https://coolify.io) auto-hébergé sur votre VPS :
 
-1. Installez Coolify sur votre VPS :
+1. Installez Coolify :
    ```bash
    curl -fsSL https://cdn.coollabs.io/coolify/install.sh | sh
    ```
-2. **New Project → New Resource → Docker Compose Empty**.
-3. Collez le contenu de
-   [`docker-compose.pull.yml`](https://raw.githubusercontent.com/cedricarlos07/companion-web/main/docker-compose.pull.yml),
-   et les variables d'environnement (même bloc que §3, étape 4).
-4. **Deploy** → puis dans le service `companion` → **Domains** →
-   `https://companion.votre-domaine.fr` → cochez HTTPS (Let's Encrypt
-   automatique) → port `5299`.
+2. **New Project → New Resource → Docker Image** :
+   - Image : `ghcr.io/cedricarlos07/companion-web:latest`
+   - Port : `5299`
+   - Variables d'environnement :
+     ```
+     JWT_SECRET=<openssl rand -hex 32>
+     ENCRYPTION_KEY=<openssl rand -hex 16>
+     ```
+3. **Storage** → Add : montez `/app/data` (Persistent directory) — vos
+   données y vivent (base embarquée + fichiers).
+4. **Domains** → `https://companion.votre-domaine.fr` → HTTPS Let's Encrypt
+   automatique.
+5. **Deploy** → ouvrez le domaine → l'assistant crée votre organisation.
+
+C'est tout : la base de données est **embarquée** (PostgreSQL/pgvector
+intégré à l'image via PGlite) — aucun service séparé à gérer. Le paramétrage
+de la licence (`LICENSE_SERVER_URL` + `LICENSE_PUBLIC_KEY`, fournis par
+KamaLoka) s'ajoute dans les mêmes variables d'environnement.
 
 ---
 
