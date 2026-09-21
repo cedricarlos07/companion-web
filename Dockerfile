@@ -1,6 +1,7 @@
 # ---- Stage 1 : Build frontend ----
 FROM node:22-slim AS build
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 COPY src/ src/
@@ -12,7 +13,7 @@ RUN npx vite build
 
 # ---- Stage 2 : Production ----
 FROM node:22-slim
-RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client curl python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps --omit=dev
