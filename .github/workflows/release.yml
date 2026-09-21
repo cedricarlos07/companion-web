@@ -58,7 +58,8 @@ jobs:
           awk "/^## v${{ steps.ver.outputs.version }}/{f=1;next} /^## v/{f=0} f" CHANGELOG.md > notes.md
           gh release create "${{ github.ref_name }}" \
             --title "Companion ${{ steps.ver.outputs.version }}" \
-            --notes-file notes.md
+            --notes-file notes.md 2>/dev/null || \
+            gh release edit "${{ github.ref_name }}" --notes-file notes.md
 
       # Publier la version au Control Center — best-effort : la release
       # GitHub existe déjà si le CC est injoignable (secrets absents en dev).
