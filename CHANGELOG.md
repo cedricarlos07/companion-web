@@ -1,5 +1,9 @@
 # Changelog — Companion
 
+## v1.0.6 (2026-09-21)
+
+Docs page : note de licence alignée sur le flux réel (import via Facturation
+après l'installation, retéléchargement depuis le portail client).
 ## v1.0.5 (2026-09-21)
 
 Landing : section self-hosted avec la commande d'installation. Docs : mise
