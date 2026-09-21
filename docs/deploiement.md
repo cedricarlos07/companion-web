@@ -41,6 +41,15 @@ curl -fsSL https://raw.githubusercontent.com/cedricarlos07/companion-web/main/in
 Le script : installe Docker si absent → génère vos secrets → télécharge la
 configuration → démarre l'application → affiche l'URL.
 
+**Sans SSH — le kit .zip** : téléchargez
+[companion-deploy-kit.zip](https://github.com/cedricarlos07/companion-web/releases/latest/download/companion-deploy-kit.zip)
+(dernière release), copiez-le sur le serveur, dézippez, remplissez `.env`
+(secrets générés avec `openssl rand -hex`), puis :
+
+```bash
+docker compose up -d
+```
+
 **C'est tout pour le serveur.** Vos données vivent dans un volume Docker
 dédié (`companion-data`) et survivent aux mises à jour et aux redémarrages.
 

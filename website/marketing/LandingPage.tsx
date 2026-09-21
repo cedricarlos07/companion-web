@@ -684,8 +684,21 @@ export function LandingPage() {
           </div>
         </Reveal>
         <Reveal delay={120}>
-          <p className="mt-6 text-center">
-            <ButtonLink variant="primary" size="small" href="/docs#installation">Guide d'installation complet</ButtonLink>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <ButtonLink
+              variant="primary"
+              size="small"
+              href="https://github.com/cedricarlos07/companion-web/releases/latest/download/companion-deploy-kit.zip"
+            >
+              Télécharger le kit (.zip)
+            </ButtonLink>
+            <ButtonLink variant="secondary" size="small" href="/docs#installation">
+              Guide d'installation complet
+            </ButtonLink>
+          </div>
+          <p className="mt-3 text-center text-caption-1-medium text-text-tertiary">
+            Le kit contient le compose, l'updater et le modèle de secrets — l'application
+            elle-même est téléchargée automatiquement de GHCR au lancement.
           </p>
         </Reveal>
       </Section>

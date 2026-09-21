@@ -61,6 +61,25 @@ jobs:
             --notes-file notes.md 2>/dev/null || \
             gh release edit "${{ github.ref_name }}" --notes-file notes.md
 
+      - name: Kit de déploiement (.zip)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p kit/companion-deploy-kit
+          cp docker-compose.pull.yml kit/companion-deploy-kit/docker-compose.yml
+          cp update.sh kit/companion-deploy-kit/
+          cat > kit/companion-deploy-kit/.env.example <<'ENV'
+          # Secrets — générez : openssl rand -hex 32 (JWT) et -hex 16 (ENCRYPTION)
+          JWT_SECRET=
+          ENCRYPTION_KEY=
+          # Licence (fournie par KamaLoka après souscription)
+          # LICENSE_SERVER_URL=https://license.kamaloka.ai
+          # LICENSE_PUBLIC_KEY=
+          ENV
+          printf 'COMPANION — kit de déploiement\n\n1. Renommez .env.example en .env et remplissez les secrets\n2. docker compose up -d\n3. Ouvrez http://IP:5299 — l'"'"'assistant web crée votre organisation\n\nMises à jour : ./update.sh\n' > kit/companion-deploy-kit/LISEZMOI.txt
+          (cd kit && zip -r ../companion-deploy-kit.zip companion-deploy-kit)
+          gh release upload "${{ github.ref_name }}" companion-deploy-kit.zip --clobber
+
       # Publier la version au Control Center — best-effort : la release
       # GitHub existe déjà si le CC est injoignable (secrets absents en dev).
       - name: Notifier le Control Center
