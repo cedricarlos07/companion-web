@@ -1,5 +1,16 @@
 # Changelog — Companion
 
+## v1.0.10 (2026-09-21)
+
+Sécurité de l'assistant d'installation + corrections landing.
+
+- /setup exige un **code d'installation** quand le serveur en définit un
+  (SETUP_CODE — généré et affiché par install.sh) : plus personne ne peut
+  revendiquer une instance vierge en visitant le domaine.
+- Landing : un seul CTA hero (téléchargement self-hosted) ; les doubles
+  boutons démo retirés.
+- Domaines de documentation corrigés (fini les références kamaloka.ai
+  introuvables).
 ## v1.0.9 (2026-09-21)
 
 Publication courante — instance companionbrain.online mise à jour.

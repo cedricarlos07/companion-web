@@ -23,6 +23,7 @@ services:
       MEM0_VECTOR_STORE: pgvector
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY:-}
+      SETUP_CODE: ${SETUP_CODE:-}
     volumes:
       - companion-data:/app/data
     restart: unless-stopped

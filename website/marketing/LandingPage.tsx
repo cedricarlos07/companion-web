@@ -350,12 +350,10 @@ export function LandingPage() {
                 className="w-full justify-center sm:w-auto">
                 Télécharger pour votre serveur
               </ButtonLink>
-              <ButtonLink variant="primary" size="medium" href="/demo?objet=risk"
-                className="w-full justify-center sm:w-auto">
-                Évaluer le risque de mon entreprise
-              </ButtonLink>
-              <ButtonLink variant="secondary" size="medium" href="/demo" className="w-full justify-center sm:w-auto">Demander une démonstration</ButtonLink>
             </div>
+            <p className="mt-3 text-caption-1-medium text-text-tertiary">
+              Kit d'auto-hébergement (.zip) : compose, mises à jour, secrets — l'application est téléchargée automatiquement de GHCR. Besoin d'un accompagnement ? <a href="/demo" className="text-accent-600 no-underline">Demander une démonstration</a>.
+            </p>
             <p className="mt-3 text-caption-1-medium text-text-tertiary">
               Kit d'auto-hébergement (.zip) : compose, mises à jour, secrets — l'application est téléchargée automatiquement de GHCR.
             </p>
@@ -668,7 +666,7 @@ export function LandingPage() {
         </div>
         <Reveal delay={150}>
           <p className="mt-8 text-center text-caption-1-medium text-text-tertiary">
-            Documentation complète : <a href="/docs" className="text-accent-600 no-underline">docs.companion.kamaloka.ai</a>
+            Documentation complète : <a href="/docs" className="text-accent-600 no-underline">/docs</a>
           </p>
         </Reveal>
       </Section>

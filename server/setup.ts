@@ -11,7 +11,11 @@ export function buildSetupRouter(dbh: DbHandle): Router {
 
   router.get('/status', async (_req, res) => {
     const orgs = await dbh.query<{ cnt: string }>(`SELECT count(*)::text AS cnt FROM organizations`)
-    res.json({ needsSetup: Number(orgs[0]?.cnt ?? 0) === 0 })
+    res.json({
+      needsSetup: Number(orgs[0]?.cnt ?? 0) === 0,
+      // Le wizard exige le code d'installation quand le serveur en définit un.
+      codeRequired: Boolean(process.env.SETUP_CODE),
+    })
   })
 
   router.post('/', async (req, res) => {
@@ -23,8 +27,15 @@ export function buildSetupRouter(dbh: DbHandle): Router {
     const {
       orgName, sector, country,
       ownerEmail, ownerPassword, ownerFirstName, ownerLastName,
-      departmentName, roleName,
+      departmentName, roleName, setupCode,
     } = req.body as Record<string, string>
+
+    // Garde anti-revendication : si un code d'installation est configuré
+    // (install.sh le génère), il est obligatoire pour configurer l'instance.
+    const expectedCode = process.env.SETUP_CODE
+    if (expectedCode && setupCode !== expectedCode) {
+      return res.status(403).json({ error: 'code d’installation invalide' })
+    }
 
     if (!orgName || !ownerEmail || !ownerPassword || ownerPassword.length < 8) {
       return res.status(400).json({ error: 'orgName, ownerEmail et ownerPassword (8+) requis' })

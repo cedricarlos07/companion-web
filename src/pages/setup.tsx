@@ -40,6 +40,8 @@ export function SetupPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [alreadySetup, setAlreadySetup] = useState(false)
+  const [codeRequired, setCodeRequired] = useState(false)
+  const [setupCode, setSetupCode] = useState('')
 
   // Étape 1 — organisation + compte propriétaire
   const [name, setName] = useState('')
@@ -63,7 +65,10 @@ export function SetupPage() {
   useEffect(() => {
     fetch('/api/setup/status')
       .then((r) => r.json())
-      .then((d: { needsSetup?: boolean }) => setAlreadySetup(d.needsSetup === false))
+      .then((d: { needsSetup?: boolean; codeRequired?: boolean }) => {
+        setAlreadySetup(d.needsSetup === false)
+        setCodeRequired(d.codeRequired === true)
+      })
       .catch(() => undefined)
   }, [])
 
@@ -89,6 +94,7 @@ export function SetupPage() {
           ownerLastName: ownerLastName.trim(),
           ownerEmail: ownerEmail.trim(),
           ownerPassword,
+          setupCode: setupCode.trim() || undefined,
         }),
       })
       if (res.status === 409) {
@@ -224,6 +230,9 @@ export function SetupPage() {
                 </div>
                 <Input label="Email administrateur" type="email" value={ownerEmail} onChange={setOwnerEmail} placeholder="admin@entreprise.ci" autoComplete="email" />
                 <Input label="Mot de passe (8 caractères minimum)" type="password" value={ownerPassword} onChange={setOwnerPassword} placeholder="••••••••" autoComplete="new-password" />
+                {codeRequired && (
+                  <Input label="Code d'installation" value={setupCode} onChange={setSetupCode} placeholder="Fourni par le script d'installation" autoComplete="off" />
+                )}
               </section>
             )}
 

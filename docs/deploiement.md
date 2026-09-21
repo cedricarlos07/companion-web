@@ -39,7 +39,9 @@ curl -fsSL https://raw.githubusercontent.com/cedricarlos07/companion-web/main/in
 ```
 
 Le script : installe Docker si absent → génère vos secrets → télécharge la
-configuration → démarre l'application → affiche l'URL.
+configuration → démarre l'application → affiche l'URL **et un code
+d'installation** (ex. `CMP-1a2b3c4d`) à saisir dans l'assistant web — lui
+seul permet de configurer l'instance, personne d'autre ne peut la revendiquer.
 
 **Sans SSH — le kit .zip** : téléchargez
 [companion-deploy-kit.zip](https://github.com/cedricarlos07/companion-web/releases/latest/download/companion-deploy-kit.zip)

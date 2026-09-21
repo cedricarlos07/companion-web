@@ -37,11 +37,13 @@ curl -fsSL "$RAW/update.sh" -o update.sh && chmod +x update.sh
 # 3. Secrets (idempotent : un .env existant est conservé)
 if [ ! -f .env ]; then
   rand() { openssl rand -hex "$1" 2>/dev/null || head -c "$1" /dev/urandom | xxd -p; }
+  SETUP_CODE="CMP-$(openssl rand -hex 4 2>/dev/null || head -c 4 /dev/urandom | xxd -p)"
   cat > .env <<ENV
 COMPANION_VERSION=$VERSION
 POSTGRES_PASSWORD=$(rand 16)
 JWT_SECRET=$(rand 32)
 ENCRYPTION_KEY=$(rand 16)
+SETUP_CODE=$SETUP_CODE
 ENV
   chmod 600 .env
   echo "— Secrets générés dans $INSTALL_DIR/.env"
@@ -68,4 +70,6 @@ echo "      http://${IP}:5299"
 echo ""
 echo "   L'assistant web crée votre organisation et votre compte"
 echo "   administrateur. Instance vierge — aucune donnée de démo."
+echo ""
+echo "   Code d'installation à saisir dans l'assistant : $SETUP_CODE"
 echo "   Mises à jour : ./update.sh"
