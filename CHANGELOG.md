@@ -1,5 +1,13 @@
 # Changelog — Companion
 
+## v1.0.7 (2026-09-21)
+
+Kit de déploiement téléchargeable en un clic depuis la landing page.
+
+- Chaque release publie `companion-deploy-kit.zip` : docker-compose.yml,
+  update.sh, .env.example, LISEZMOI
+- Bouton « Télécharger le kit (.zip) » sur la landing (section Self-hosted)
+- Guide de déploiement : option kit sans SSH
 ## v1.0.6 (2026-09-21)
 
 Docs page : note de licence alignée sur le flux réel (import via Facturation
