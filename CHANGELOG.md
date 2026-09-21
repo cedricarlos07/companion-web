@@ -1,5 +1,12 @@
 # Changelog — Companion
 
+## v1.0.3 (2026-09-21)
+
+Sécurité d'accès : garde de session sur toute l'application.
+
+- Les visiteurs non authentifiés sont redirigés vers /login (ou /setup sur
+  une instance vierge) — plus jamais l'accueil avec des erreurs de backend.
+- L'assistant de configuration reste accessible sur instance vierge.
 ## v1.0.2 (2026-09-21)
 
 Installation simplifiée — images pré-construites + instance vierge.

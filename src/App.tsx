@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppStoreProvider } from '@/store/app-store'
 import { AppShell } from '@/components/layout/app-shell'
@@ -38,6 +39,43 @@ import { PortalInstancesPage } from '@/pages/portal/instances'
 import { PortalInvoicesPage } from '@/pages/portal/invoices'
 import { PortalSupportPage } from '@/pages/portal/support'
 
+/**
+ * Garde de session : aucun visiteur non authentifié n'accède à
+ * l'application. Instance vierge → assistant /setup. Sinon → /login.
+ */
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<"checking" | "ok" | "setup" | "login">("checking")
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const me = await fetch("/api/auth/me", { credentials: "include" })
+        if (me.ok) {
+          if (!cancelled) setState("ok")
+          return
+        }
+        const setup = await fetch("/api/setup/status")
+        const body = (await setup.json().catch(() => null)) as { needsSetup?: boolean } | null
+        if (!cancelled) setState(body?.needsSetup ? "setup" : "login")
+      } catch {
+        if (!cancelled) setState("login")
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  if (state === "checking") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background-full">
+        <p className="text-body-medium text-text-tertiary">Chargement de votre espace…</p>
+      </div>
+    )
+  }
+  if (state === "setup") return <Navigate to="/setup" replace />
+  if (state === "login") return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <AppStoreProvider>
@@ -58,8 +96,8 @@ export default function App() {
             <Route path="support" element={<PortalSupportPage />} />
           </Route>
 
-          {/* Main application */}
-          <Route element={<AppShell />}>
+          {/* Main application — session requise */}
+          <Route element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route path="/home" element={<HomePage />} />
             <Route path="/ask" element={<AskPage />} />
             <Route path="/brain" element={<BrainPage />} />
