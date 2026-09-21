@@ -1,5 +1,13 @@
 # Changelog — Companion
 
+## v1.0.4 (2026-09-21)
+
+Le site public (landing, documentation, démo) est servi par l'instance elle-même.
+
+- Racine du domaine = landing page produit + pages /docs et /demo
+- L'application reste sur /login, /setup et ses routes métier
+- Assets marketing isolés sous /site/ (zéro collision avec l'app)
+- Garde de session v1.0.3 intacte : /home exige une session
 ## v1.0.3 (2026-09-21)
 
 Sécurité d'accès : garde de session sur toute l'application.

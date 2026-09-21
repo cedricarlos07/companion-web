@@ -9,6 +9,7 @@ import tailwindcss from '@tailwindcss/vite'
  * Réutilise le design system Companion (BoardUI + Hugeicons + tokens) via l'alias @.
  */
 export default defineConfig({
+  base: '/site/',
   root: 'website',
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },

@@ -77,8 +77,9 @@ Sur Dokploy/Coolify, le HTTPS est intégré — cette étape est inutile.)
 
 ## 3. L'assistant de configuration (2 minutes)
 
-Ouvrez `http://IP:5299` (ou votre domaine HTTPS). L'instance est **vierge** :
-l'assistant crée tout.
+Ouvrez `http://IP:5299` (ou votre domaine HTTPS). La **page d'accueil
+présente le produit** ; cliquez « Se connecter ». Une instance vierge vous
+envoie directement à l'assistant : il crée tout.
 
 **Étape 1 — Votre organisation**
 - Nom de l'entreprise, secteur, pays
