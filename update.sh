@@ -17,7 +17,12 @@ CHECK_ONLY=false
 [ "${1:-}" = "--check" ] && CHECK_ONLY=true
 
 UPDATE_SERVER="${UPDATE_SERVER:-http://localhost:5300}"
-COMPOSE_FILE="docker-compose.prod.yml"
+# Mode image (docker-compose.yml tiré par install.sh) ou mode source (prod.yml)
+if [ -f docker-compose.yml ] && grep -q "ghcr.io" docker-compose.yml 2>/dev/null; then
+  COMPOSE_FILE="docker-compose.yml"
+else
+  COMPOSE_FILE="docker-compose.prod.yml"
+fi
 
 echo "═══ Companion — mise à jour ═══"
 echo "Serveur de mises à jour : ${UPDATE_SERVER}"
@@ -50,19 +55,30 @@ if command -v docker &>/dev/null && docker compose ps -q companion 2>/dev/null |
     "fetch('http://localhost:5299/api/backup',{method:'POST'})" || echo "  (backup via API ignoré — instance hors docker)"
 fi
 
-# 4. Récupérer le tag exact
-git fetch --tags --force
-if git rev-parse -q --verify "refs/tags/v${LATEST}" >/dev/null; then
-  git checkout -q "v${LATEST}"
+# 4. Récupérer la nouvelle version
+if grep -q "ghcr.io" "${COMPOSE_FILE}" 2>/dev/null; then
+  # Mode image : pointer sur le tag publié puis tirer.
+  sed -i.bak "s|ghcr.io/cedricarlos07/companion-web:.*|ghcr.io/cedricarlos07/companion-web:${LATEST}|" "${COMPOSE_FILE}"
+  rm -f "${COMPOSE_FILE}.bak"
 else
-  echo "⚠  tag v${LATEST} absent du dépôt — mise à jour vers origin/main."
-  git pull --ff-only
+  git fetch --tags --force
+  if git rev-parse -q --verify "refs/tags/v${LATEST}" >/dev/null; then
+    git checkout -q "v${LATEST}"
+  else
+    echo "⚠  tag v${LATEST} absent du dépôt — mise à jour vers origin/main."
+    git pull --ff-only
+  fi
 fi
 
 # 5. Reconstruire et redémarrer
 if command -v docker &>/dev/null && [ -f "${COMPOSE_FILE}" ]; then
-  echo "— Build Docker + redémarrage…"
-  docker compose -f ${COMPOSE_FILE} build companion
+  if grep -q "ghcr.io" "${COMPOSE_FILE}" 2>/dev/null; then
+    echo "— Tirage de l'image ${LATEST} + redémarrage…"
+    docker compose -f ${COMPOSE_FILE} pull companion
+  else
+    echo "— Build Docker + redémarrage…"
+    docker compose -f ${COMPOSE_FILE} build companion
+  fi
   docker compose -f ${COMPOSE_FILE} up -d companion
   docker compose -f ${COMPOSE_FILE} logs -f --tail 20 companion &
   LOG_PID=$!

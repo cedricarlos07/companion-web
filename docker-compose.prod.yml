@@ -80,7 +80,7 @@ services:
       ACTIVEPIECES_ENABLED: ${ACTIVEPIECES_ENABLED:-false}
       ACTIVEPIECES_URL: ${ACTIVEPIECES_URL:-http://activepieces:80}
       ACTIVEPIECES_MCP_TOKEN: ${ACTIVEPIECES_MCP_TOKEN:-}
-      AUTO_SEED: ${AUTO_SEED:-true}
+      AUTO_SEED: ${AUTO_SEED:-}
       LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY:-}
     volumes:
       - companion-uploads:/app/data/uploads

@@ -1,0 +1,60 @@
+# COMPANION — déploiement par images pré-construites (recommandé clients)
+#
+#   1. Copier ce fichier sur le serveur
+#   2. Créer un fichier .env à côté (secrets — voir install.sh qui le fait)
+#   3. docker compose -f docker-compose.pull.yml up -d
+#
+# Aucun clone de repo, aucun build : les images sont tirées de GHCR.
+# Mettre à jour : changer la version de l'image puis `up -d` (ou ./update.sh).
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: companion-pg
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-companion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: ${POSTGRES_DB:-companion}
+    volumes:
+      - companion-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-companion}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  companion:
+    image: ghcr.io/cedricarlos07/companion-web:${COMPANION_VERSION:-latest}
+    container_name: companion-app
+    ports:
+      - '5299:5299'
+    environment:
+      NODE_ENV: production
+      PORT: 5299
+      DATABASE_URL: postgres://${POSTGRES_USER:-companion}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-companion}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY required}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      EMBED_MODEL: ${EMBED_MODEL:-nomic-embed-text}
+      MEMORY_SEARCH_ENGINE: fusion
+      MEM0_VECTOR_STORE: pgvector
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY:-}
+      # Instance client = VIERGE. AUTO_SEED=1 uniquement pour une démo.
+      AUTO_SEED: ${AUTO_SEED:-}
+    volumes:
+      - companion-uploads:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  companion-pgdata:
+  companion-uploads:
+
+# Connecteurs applicatifs (optionnel) : ajouter les services redis +
+# activepieces depuis docker-compose.prod.yml et définir
+# ACTIVEPIECES_ENABLED=true.

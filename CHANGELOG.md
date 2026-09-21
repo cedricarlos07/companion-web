@@ -1,5 +1,21 @@
 # Changelog — Companion
 
+## v1.0.2 (2026-09-21)
+
+Installation simplifiée — images pré-construites + instance vierge.
+
+### Déploiement
+- Images Docker publiées sur GHCR à chaque release (plus de build côté client)
+- docker-compose.pull.yml : déploiement par tirage d'images (postgres + companion)
+- install.sh v2 : une commande, aucun clone ni build ; ./update.sh tire les images
+- Instance client VIERGE par défaut : seed de démonstration OPT-IN (AUTO_SEED=1)
+- Assistant de premier démarrage : organisation, département/rôle, compte admin,
+  invitations réelles ; redirection automatique depuis la page de connexion
+- POST /departments et POST /roles (audités) : structure créable sans seed
+
+### CI
+- Workflow docker : publication GHCR sur tag, versions cohérentes vérifiées
+
 ## v1.0.1 (2026-09-20)
 
 Phase anti-mock terminée — allowlist zéro — loop commercial prouvé.

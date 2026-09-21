@@ -17,7 +17,7 @@ Companion transforme les documents, emails et conversations de votre entreprise 
 
 ---
 
-## Installation production (VPS Linux) — une commande
+## Installation production (VPS Linux) — une commande, images pré-construites
 
 Sur un VPS Linux neuf (Ubuntu/Debian) :
 
@@ -25,15 +25,24 @@ Sur un VPS Linux neuf (Ubuntu/Debian) :
 curl -fsSL https://raw.githubusercontent.com/cedricarlos07/companion-web/main/install.sh | bash
 ```
 
-Le script installe Docker si besoin, génère les secrets, démarre la stack
-(PostgreSQL + pgvector, Redis, Companion) puis affiche l'URL.
+Aucun clone, aucun build : le script installe Docker si besoin, génère les
+secrets, **tire les images publiées** (GHCR) et démarre la stack.
 
-**Dernière étape (2 minutes, dans le navigateur)** : ouvrez
-`http://<IP>:5299` — l'assistant de configuration crée votre organisation,
-votre compte administrateur et invite votre équipe. **L'instance démarre
-vierge** : aucune donnée de démonstration (voir le guide administrateur).
+**Dernière étape (2 minutes, dans le navigateur)** : ouvrez `http://<IP>:5299`
+— l'assistant de configuration crée votre organisation, votre compte
+administrateur et invite votre équipe. **Instance vierge par défaut.**
 
-Installation manuelle :
+Mise à jour ultérieure : `./update.sh` (backup → nouvelle image → santé).
+
+> ⚠ Une seule action manuelle côté KamaLoka après la première publication :
+> rendre le package GHCR public (GitHub → Packages → companion-web →
+> Package settings → Change visibility → Public) pour que les clients
+> puissent tirer l'image sans token.
+
+> Données de démonstration (démos commerciales uniquement) : `AUTO_SEED=1`
+> avant le premier démarrage — jamais en production.
+
+Installation manuelle (mode source, pour développer) :
 
 ```bash
 git clone https://github.com/cedricarlos07/companion-web.git && cd companion-web
@@ -44,10 +53,6 @@ export AP_ENCRYPTION_KEY=$(openssl rand -hex 16)
 export AP_JWT_SECRET=$(openssl rand -hex 32)
 docker compose -f docker-compose.prod.yml up -d
 ```
-
-> Données de démonstration (démos commerciales uniquement) : ajoutez
-> `AUTO_SEED=1` à l'environnement avant le premier démarrage — jamais en
-> production.
 
 ---
 
