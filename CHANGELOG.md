@@ -1,5 +1,10 @@
 # Changelog — Companion
 
+## v1.0.5 (2026-09-21)
+
+Landing : section self-hosted avec la commande d'installation. Docs : mise
+à jour complète (installation en 1 commande, assistant 3 étapes, mises à
+jour via ./update.sh, base embarquée par défaut).
 ## v1.0.4 (2026-09-21)
 
 Le site public (landing, documentation, démo) est servi par l'instance elle-même.

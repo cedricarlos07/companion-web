@@ -666,6 +666,30 @@ export function LandingPage() {
         </Reveal>
       </Section>
 
+      {/* 12b · Self-hosté en une commande */}
+      <Section>
+        <SectionHead
+          eyebrow="Self-hosted"
+          title="Déployez votre instance en une commande."
+          sub="Ubuntu + Docker suffisent. Instance vierge garantie : l'assistant intégré crée votre organisation et votre compte administrateur. Vos données restent chez vous."
+        />
+        <Reveal>
+          <div className="mx-auto max-w-3xl rounded-2xl border border-border-button-default bg-brand-black p-5 text-center">
+            <code className="block break-all font-mono text-body-2-medium text-companion-300">
+              curl -fsSL https://raw.githubusercontent.com/cedricarlos07/companion-web/main/install.sh | bash
+            </code>
+            <p className="mt-3 text-caption-1-medium text-white/60">
+              Puis ouvrez http://votre-serveur:5299 — mises à jour incluses via ./update.sh
+            </p>
+          </div>
+        </Reveal>
+        <Reveal delay={120}>
+          <p className="mt-6 text-center">
+            <ButtonLink variant="primary" size="small" href="/docs#installation">Guide d'installation complet</ButtonLink>
+          </p>
+        </Reveal>
+      </Section>
+
       {/* 13 · CTA final */}
       <Section dark>
         <Reveal className="mx-auto max-w-3xl text-center">

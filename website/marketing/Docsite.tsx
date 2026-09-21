@@ -105,13 +105,13 @@ const DOCS: { group: string; articles: Article[] }[] = [
             ['Serveur', 'Ubuntu 24.04+ (VPS, cloud privé ou interne)'],
             ['CPU / RAM', '4 CPU · 8 Go RAM'],
             ['Disque', '50 Go SSD'],
-            ['Logiciel', 'Docker + Docker Compose v2'],
+            ['Logiciel', 'Aucun — le script installe Docker'],
             ['Réseau', 'Un nom de domaine pointant vers le serveur'],
           ]},
           { t: 'h2', c: '2. Installation' },
-          { t: 'p', c: 'Récupérez le kit depuis votre [portail client](/portal/login), puis :' },
-          { t: 'code', c: 'unzip companion-kit.zip && cd companion-kit\nsudo ./install.sh' },
-          { t: 'p', c: 'Le script vérifie les pré-requis, génère vos secrets, démarre la stack complète et enregistre votre licence.' },
+          { t: 'p', c: 'Une seule commande sur votre serveur :' },
+          { t: 'code', c: 'curl -fsSL https://raw.githubusercontent.com/cedricarlos07/companion-web/main/install.sh | bash' },
+          { t: 'p', c: 'Le script installe Docker si absent, génère vos secrets, tire les images officielles et démarre Companion. Instance **vierge** : l’assistant web (étape 5) fait le reste.' },
           { t: 'note', tone: 'info', c: 'La licence `companion-license.lic` peut être passée au script (`COMPANION_LICENSE_FILE=… ./install.sh`) ou collée à la demande.' },
           { t: 'h2', c: '3. Ouvrir' },
           { t: 'code', c: 'https://companion.votreentreprise.com' },
@@ -127,7 +127,7 @@ const DOCS: { group: string; articles: Article[] }[] = [
       {
         id: 'premier-demarrage', kicker: 'Commencer', title: 'Premier démarrage',
         blocks: [
-          { t: 'p', c: 'Après l\'installation, l\'assistant **/setup** crée votre organisation en 5 étapes : organisation (nom, secteur, compte administrateur), intelligence (modèle local par défaut — aucune donnée n\'en sort — ou fournisseur externe BYOK), sources, équipe (invitations par email), terminé (session ouverte).' },
+          { t: 'p', c: 'Après l\'installation, l\'assistant **/setup** crée votre organisation en 3 étapes : organisation (nom, secteur, pays, premier département et rôle, **compte administrateur**), invitations — aucune donnée n\'en sort — ou fournisseur externe BYOK) — puis vous êtes connecté. Instance **vierge** : aucune donnée de démonstration.' },
           { t: 'h2', c: 'Les 3 premières actions recommandées' },
           { t: 'ol', items: [
             'Importez 5 à 10 documents représentatifs dans **Sources**.',
@@ -429,7 +429,7 @@ const DOCS: { group: string; articles: Article[] }[] = [
       ]},
       { id: 'mises-a-jour', kicker: 'Administration', title: 'Mises à jour', blocks: [
         { t: 'p', c: 'Companion vérifie périodiquement la dernière version stable et l\'affiche dans les paramètres. **Aucune mise à jour n\'est jamais appliquée automatiquement.**' },
-        { t: 'code', c: '1. Sauvegarde complète        →  POST /api/backup\n2. Récupérer le nouveau kit   →  portail client\n3. docker compose pull && docker compose up -d\n4. Vérifier la santé          →  /api/status\n5. En cas de problème         →  restaurer + image précédente' },
+        { t: 'code', c: '1. Sauvegarde complète        →  automatique via ./update.sh\n2. Nouvelle version           →  ./update.sh (image officielle GHCR)\n3. Vérifier la santé          →  /api/status\n4. En cas de problème         →  restaurer + image précédente' },
         { t: 'note', tone: 'info', c: 'Le portail client affiche la version installée vs la dernière stable, et les notes de version.' },
       ]},
       { id: 'securite', kicker: 'Administration', title: 'Sécurité', blocks: [
@@ -492,7 +492,7 @@ const DOCS: { group: string; articles: Article[] }[] = [
     group: 'Dépannage',
     articles: [
       { id: 'diagnostic', kicker: 'Dépannage', title: 'Diagnostic', blocks: [
-        { t: 'code', c: '# Santé globale (IA, mémoire, compteurs)\ncurl -s https://…/api/status | jq\n\n# État du moteur mémoire\ncurl -s -b cookies.txt https://…/api/system/memory-provider/health | jq\n\n# Stack Docker\ndocker compose -f docker-compose.prod.yml ps\ndocker compose -f docker-compose.prod.yml logs --tail=100 companion' },
+        { t: 'code', c: '# Santé globale (IA, mémoire, compteurs)\ncurl -s https://…/api/status | jq\n\n# État du moteur mémoire\ncurl -s -b cookies.txt https://…/api/system/memory-provider/health | jq\n\n# Stack Docker\ndocker compose ps\ndocker compose logs --tail=100 companion' },
       ]},
       { id: 'mem0-degraded', kicker: 'Dépannage', title: 'Mem0 degraded', blocks: [
         { t: 'p', c: '**Symptôme :** l\'état mémoire affiche « dégradé » ou le moteur retombe sur le moteur natif.' },
@@ -511,15 +511,15 @@ const DOCS: { group: string; articles: Article[] }[] = [
         ]},
       ]},
       { id: 'postgresql', kicker: 'Dépannage', title: 'PostgreSQL', blocks: [
-        { t: 'code', c: '# Le conteneur répond ?\ndocker exec -it companion-db pg_isready -U companion\n\n# Taille et santé\ndocker exec -it companion-db psql -U companion -d companion \\\n  -c "SELECT pg_size_pretty(pg_database_size(\'companion\'));"' },
+        { t: 'code', c: '# Le conteneur répond ?\n# Variante PostgreSQL (défaut : base embarquée)\ndocker exec -it companion-db pg_isready -U companion\n\n# Taille et santé\ndocker exec -it companion-db psql -U companion -d companion \\\n  -c "SELECT pg_size_pretty(pg_database_size(\'companion\'));"' },
         { t: 'p', c: 'Les données vivent dans le volume `companion-pgdata` — sauvegardé par le backup JSON et sauvegeable à froid en arrêtant la stack.' },
       ]},
       { id: 'redis', kicker: 'Dépannage', title: 'Redis', blocks: [
         { t: 'p', c: 'Redis sert au rate limiting et aux files. S\'il est indisponible, Companion bascule sur un limiteur en mémoire : le service continue.' },
-        { t: 'code', c: 'docker compose -f docker-compose.prod.yml restart redis' },
+        { t: 'code', c: 'docker compose restart redis' },
       ]},
       { id: 'logs', kicker: 'Dépannage', title: 'Logs', blocks: [
-        { t: 'code', c: '# Application\ndocker compose -f docker-compose.prod.yml logs -f companion\n\n# Journal d\'audit applicatif\ncurl -s -b cookies.txt https://…/api/audit | jq' },
+        { t: 'code', c: '# Application\ndocker compose logs -f companion\n\n# Journal d\'audit applicatif\ncurl -s -b cookies.txt https://…/api/audit | jq' },
         { t: 'note', tone: 'info', c: 'Un problème persistant ? Écrivez à [support@kamaloka.ai](mailto:support@kamaloka.ai) avec le diagnostic (`/api/status`) et les 100 dernières lignes de logs.' },
       ]},
     ],
