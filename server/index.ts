@@ -106,7 +106,7 @@ async function main() {
   // Serve the built frontend (self-hosted single binary mode).
   // Site marketing (landing / docs / démo) servi à la racine — l'application
   // reste sur /login, /setup et ses routes métier.
-  const siteDir = path.join(__dirname, '..', 'website-dist')
+  const siteDir = path.join(__dirname, '..', 'website', 'dist')
   const hasSite = fs.existsSync(path.join(siteDir, 'landing.html'))
   if (hasSite) {
     app.use('/site', express.static(siteDir))
@@ -116,6 +116,7 @@ async function main() {
     app.get('/landing', page('landing.html'))
     app.get('/docs', page('docs.html'))
     app.get('/demo', page('demo.html'))
+    app.get('/legal', page('legal.html'))
   }
 
   const distDir = path.join(__dirname, '..', 'dist')

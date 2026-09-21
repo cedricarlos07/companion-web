@@ -21,7 +21,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps --omit=dev
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/website/dist ./website-dist
+COPY --from=build /app/website/dist ./website/dist
 COPY server/ server/
 COPY scripts/demo-docs/ scripts/demo-docs/
 ENV NODE_ENV=production

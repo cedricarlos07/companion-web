@@ -64,10 +64,10 @@ export function PortalLayout() {
     <div className="flex min-h-screen flex-col bg-background-full">
       <header className="sticky top-0 z-20 border-b border-separator-border bg-background-primary-default">
         <div className="mx-auto flex h-14 w-full max-w-[1080px] items-center gap-3 px-6">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-black text-caption-1-bold text-companion-300">
-            K
+          <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-brand-black">
+            <img src="/brand/logo-green.png" alt="Companion" className="h-5 w-auto" />
           </span>
-          <span className="text-headline-semibold text-text-primary">KamaLoka</span>
+          <span className="text-headline-semibold text-text-primary">Companion</span>
           <Chip variant="subtle" color="lime">Portail client</Chip>
           <div className="flex-1" />
           {me && (
@@ -115,7 +115,7 @@ export function PortalLayout() {
 
       <main className="mx-auto w-full max-w-[1080px] flex-1 px-6 py-6">
         {checking ? (
-          <p className="py-12 text-center text-body-medium text-text-tertiary">Connexion au portail KamaLoka…</p>
+          <p className="py-12 text-center text-body-medium text-text-tertiary">Connexion au portail…</p>
         ) : session && me ? (
           <Outlet context={{ me, session }} />
         ) : (
@@ -125,7 +125,7 @@ export function PortalLayout() {
 
       <footer className="border-t border-separator-border px-6 py-3">
         <p className="mx-auto max-w-[1080px] text-caption-1-regular text-text-tertiary">
-          Portail client KamaLoka — relation commerciale et technique. Votre instance
+          Portail client — relation commerciale et technique. Votre instance
           Companion reste auto-hébergée : aucune donnée métier ne transite par ce portail.
         </p>
       </footer>
@@ -162,9 +162,9 @@ function PortalLogin({ onLoggedIn, navigate }: {
 
   return (
     <div className="mx-auto max-w-md py-10">
-      <h1 className="text-title-1-medium text-text-primary">Portail client KamaLoka</h1>
+      <h1 className="text-title-1-medium text-text-primary">Portail client</h1>
       <p className="mt-2 text-body-medium text-text-secondary">
-        Connectez-vous avec le token portail fourni par KamaLoka pour accéder à votre
+        Connectez-vous avec le token portail fourni lors de votre souscription pour accéder à votre
         licence, vos instances et vos factures.
       </p>
       <form
@@ -173,7 +173,7 @@ function PortalLogin({ onLoggedIn, navigate }: {
         noValidate
       >
         <Input
-          label="URL du Control Center KamaLoka"
+          label="URL du Control Center"
           value={baseUrl}
           onChange={setBaseUrl}
           placeholder="https://license.kamaloka.ai"

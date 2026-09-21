@@ -297,7 +297,7 @@ function Pricing() {
               'SSO · audit avancé · SLA', 'on-premise / private cloud · options air-gapped',
               'accompagnement DSI · support prioritaire',
             ]}
-            cta="Parler à KamaLoka"
+            cta="Parler à un expert"
             href="/demo?objet=enterprise"
           />
         </Reveal>
@@ -346,12 +346,19 @@ export function LandingPage() {
               Self-hosted. Vos données restent dans votre infrastructure.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ChartIcon, 20)} href="/demo?objet=risk"
+              <ButtonLink variant="primary" size="medium" leadingIcon={adaptIcon(ChartIcon, 20)} href="https://github.com/cedricarlos07/companion-web/releases/latest/download/companion-deploy-kit.zip"
+                className="w-full justify-center sm:w-auto">
+                Télécharger pour votre serveur
+              </ButtonLink>
+              <ButtonLink variant="primary" size="medium" href="/demo?objet=risk"
                 className="w-full justify-center sm:w-auto">
                 Évaluer le risque de mon entreprise
               </ButtonLink>
               <ButtonLink variant="secondary" size="medium" href="/demo" className="w-full justify-center sm:w-auto">Demander une démonstration</ButtonLink>
             </div>
+            <p className="mt-3 text-caption-1-medium text-text-tertiary">
+              Kit d'auto-hébergement (.zip) : compose, mises à jour, secrets — l'application est téléchargée automatiquement de GHCR.
+            </p>
           </Reveal>
           <Reveal delay={120}>
             <div className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
@@ -576,10 +583,10 @@ export function LandingPage() {
         <Reveal delay={150} className="mx-auto mt-12 max-w-3xl text-center">
           <p className="text-body-medium text-white/70">Vos documents, conversations et mémoires restent chez vous.</p>
           <p className="mt-3 text-title-3-semibold text-companion-300">
-            KamaLoka fournit le logiciel. Vous gardez les données.
+            Companion fournit le logiciel. Vous gardez les données.
           </p>
           <p className="mt-5 text-caption-1-medium text-white/50">
-            IA locale disponible · Licence hors-ligne · Sauvegardes contrôlées · Aucun accès permanent requis par KamaLoka
+            IA locale disponible · Licence hors-ligne · Sauvegardes contrôlées · Aucun accès permanent requis de l’éditeur
           </p>
         </Reveal>
       </Section>
@@ -731,7 +738,7 @@ export function LandingPage() {
       <footer className="border-t border-separator-border px-6 py-7">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
           <span className="text-caption-1-medium text-text-tertiary">
-            <span className="font-semibold text-text-secondary">KamaLoka AI Technologies</span> · Companion — la mémoire opérationnelle d'entreprise
+            <span className="font-semibold text-text-secondary">Companion</span> par KamaLoka AI Technologies LLC — éditeur du logiciel
           </span>
           <span className="flex gap-4 text-caption-1-medium text-text-secondary">
             <a href="/docs" className="no-underline hover:text-text-primary">Documentation</a>

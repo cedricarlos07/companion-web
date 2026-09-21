@@ -1,5 +1,15 @@
 # Changelog — Companion
 
+## v1.0.8 (2026-09-21)
+
+Image Docker : le site public (landing, docs, démo, mentions légales) est
+intégré et servi par l'instance elle-même.
+
+- Racine du domaine = landing page produit ; bouton « Télécharger pour
+  votre serveur » dans le hero
+- /legal : mentions légales complètes (éditeur, licence, données,
+  facturation/TVA, responsabilité, droit applicable)
+- Branding 100 % Companion sur le site public et le portail client
 ## v1.0.7 (2026-09-21)
 
 Kit de déploiement téléchargeable en un clic depuis la landing page.
