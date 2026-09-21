@@ -6,15 +6,25 @@ import { ProgressRow } from '@/components/common/progress'
 import { Card } from '@/components/common/stat-card'
 import { Button } from '@/components/base/buttons/button'
 import { HugeIcon, adaptIcon } from '@/components/ui/huge-icon'
-import { HierarchyIcon, UserGroupIcon, RefreshIcon } from '@/lib/icons'
+import { HierarchyIcon, UserGroupIcon, RefreshIcon, PlusSignIcon } from '@/lib/icons'
 import { api } from '@/services/api'
+import { useAppStore } from '@/store/app-store'
+import { Input } from '@/components/base/input/input'
 import type { Role } from '@/types'
 import { formatNumber } from '@/lib/format'
 
 export function RolesPage() {
   const navigate = useNavigate()
+  const { pushToast } = useAppStore()
   const [roleList, setRoleList] = useState<Role[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Création réelle (POST /roles + POST /departments à la volée)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [departmentName, setDepartmentName] = useState('')
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([])
+  const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -25,11 +35,50 @@ export function RolesPage() {
       return
     }
     setRoleList(real)
+    const depts = await api.departments()
+    if (depts) setDepartments(depts.departments)
   }, [])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  async function createRole() {
+    if (creating) return
+    if (title.trim().length < 2) {
+      pushToast('Intitulé du rôle requis.', 'error')
+      return
+    }
+    setCreating(true)
+    let deptId: string | undefined
+    const deptName = departmentName.trim()
+    if (deptName) {
+      const known = departments.find((d) => d.name.toLowerCase() === deptName.toLowerCase())
+      if (known) deptId = known.id
+      else {
+        const createdDept = await api.createDepartment(deptName)
+        if (createdDept.ok) {
+          deptId = createdDept.data.department.id
+          setDepartments((l) => [...l, createdDept.data.department])
+        } else {
+          pushToast(createdDept.error, 'error')
+          setCreating(false)
+          return
+        }
+      }
+    }
+    const res = await api.createRole({ title: title.trim(), departmentId: deptId })
+    setCreating(false)
+    if (!res.ok) {
+      pushToast(res.error, 'error')
+      return
+    }
+    pushToast(`Rôle « ${title.trim()} » créé.`, 'success')
+    setTitle('')
+    setDepartmentName('')
+    setCreateOpen(false)
+    void load()
+  }
 
   return (
     <div>
@@ -37,11 +86,37 @@ export function RolesPage() {
         title="Rôles"
         subtitle="Le savoir appartient aux rôles, pas uniquement aux individus."
         actions={
-          <Button variant="secondary" leadingIcon={adaptIcon(RefreshIcon, 20)} onClick={() => void load()}>
-            Rafraîchir
-          </Button>
+          <>
+            <Button variant="secondary" leadingIcon={adaptIcon(RefreshIcon, 20)} onClick={() => void load()}>
+              Rafraîchir
+            </Button>
+            <Button leadingIcon={adaptIcon(PlusSignIcon, 20)} onClick={() => setCreateOpen((o) => !o)}>
+              Créer un rôle
+            </Button>
+          </>
         }
       />
+
+      {createOpen && (
+        <div className="mb-4 rounded-2xl border border-border-button-default bg-background-primary-default p-4 shadow-card">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Intitulé du rôle" value={title} onChange={setTitle} placeholder="ex. Responsable Commercial" />
+            <Input
+              label="Département (existant ou nouveau)"
+              value={departmentName}
+              onChange={setDepartmentName}
+              placeholder={departments[0]?.name ?? 'ex. Commercial'}
+              hint={departments.length > 0 ? `Existants : ${departments.map((d) => d.name).join(', ')}` : undefined}
+            />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button onClick={() => void createRole()} disabled={creating}>
+              {creating ? 'Création…' : 'Créer le rôle'}
+            </Button>
+            <Button variant="ghost" onClick={() => setCreateOpen(false)}>Annuler</Button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="mb-4 rounded-xl border border-border-error-default bg-background-tertiary-error px-4 py-3 text-body-2-medium text-text-error-primary">

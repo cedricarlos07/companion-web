@@ -40,6 +40,7 @@ let child = spawn(process.execPath, [tsxCli, 'server/index.ts'], {
     ...process.env,
     PORT: String(port),
     COMPANION_DATA_DIR: dataDir,
+    AUTO_SEED: '1',
     LICENSE_SERVER_URL: process.env.LICENSE_SERVER_URL ?? 'http://localhost:5300',
   },
 })

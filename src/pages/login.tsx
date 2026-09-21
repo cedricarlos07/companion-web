@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adaptIcon } from '@/components/ui/huge-icon'
@@ -16,6 +16,16 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [forgotSent, setForgotSent] = useState<string | null>(null)
+
+  // Instance vierge → l'assistant de configuration prend la main.
+  useEffect(() => {
+    fetch('/api/setup/status')
+      .then((r) => r.json())
+      .then((d: { needsSetup?: boolean }) => {
+        if (d.needsSetup) navigate('/setup', { replace: true })
+      })
+      .catch(() => undefined)
+  }, [navigate])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()

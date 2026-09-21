@@ -195,6 +195,65 @@ export function buildApiRouter(dbh: DbHandle): Router {
     res.json({ ok: true })
   })
 
+  /* ------------------------ Départements & rôles ------------------------- */
+  // Création manuelle : indispensable sur une instance vierge (sans seed).
+
+  api.get('/departments', authRequired(dbh), async (req, res) => {
+    const rows = await dbh.query<{ id: string; name: string }>(
+      `SELECT id, name FROM departments WHERE organization_id = $1::uuid ORDER BY name`,
+      [req.user!.organizationId],
+    )
+    res.json({ departments: rows })
+  })
+
+  api.post('/departments', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+    const { name } = req.body as { name?: string }
+    const trimmed = (name ?? '').trim()
+    if (trimmed.length < 2) return res.status(400).json({ error: 'nom du département requis (2 caractères minimum)' })
+    const exists = await dbh.query<{ id: string }>(
+      `SELECT id FROM departments WHERE organization_id = $1::uuid AND lower(name) = lower($2)`,
+      [req.user!.organizationId, trimmed],
+    )
+    if (exists[0]) return res.json({ department: exists[0], existed: true })
+    const [created] = await dbh.db
+      .insert(departments)
+      .values({ organizationId: req.user!.organizationId, name: trimmed })
+      .returning()
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'department.created', targetType: 'department', targetId: created.id,
+      detail: { name: trimmed },
+    })
+    res.status(201).json({ department: created })
+  })
+
+  api.post('/roles', authRequired(dbh), requireRole('owner', 'admin', 'manager'), async (req, res) => {
+    const { title, departmentId, coverageTarget } = req.body as {
+      title?: string; departmentId?: string; coverageTarget?: number
+    }
+    const trimmed = (title ?? '').trim()
+    if (trimmed.length < 2) return res.status(400).json({ error: 'intitulé du rôle requis (2 caractères minimum)' })
+    let deptId: string | null = null
+    if (departmentId) {
+      const dept = await dbh.query<{ id: string }>(
+        `SELECT id FROM departments WHERE id = $1::uuid AND organization_id = $2::uuid`,
+        [departmentId, req.user!.organizationId],
+      )
+      if (!dept[0]) return res.status(400).json({ error: 'département inconnu' })
+      deptId = dept[0].id
+    }
+    let target = coverageTarget === undefined ? 90 : Math.floor(Number(coverageTarget))
+    if (!Number.isFinite(target) || target < 30 || target > 100) target = 90
+    const [created] = await dbh.db
+      .insert(roles)
+      .values({ organizationId: req.user!.organizationId, departmentId: deptId, title: trimmed, coverageTarget: target })
+      .returning()
+    await audit(dbh, req.user!.organizationId, {
+      actor: req.user, action: 'role.created', targetType: 'role', targetId: created.id,
+      detail: { title: trimmed, departmentId: deptId },
+    })
+    res.status(201).json({ role: created })
+  })
+
   /* ------------------------------- Roles --------------------------------- */
 
   api.get('/roles', authRequired(dbh), async (req, res) => {
@@ -1035,7 +1094,7 @@ export function buildApiRouter(dbh: DbHandle): Router {
 
   /* -------------------------------- Seed ----------------------------------- */
 
-  api.post('/admin/seed', async (_req, res) => {
+  api.post('/admin/seed', authRequired(dbh), requireRole('owner'), async (_req, res) => {
     const { seedDatabase } = await import('./seed.js')
     const result = await seedDatabase(dbh)
     res.json(result)

@@ -58,7 +58,7 @@ export function buildSetupRouter(dbh: DbHandle): Router {
       [org.id, ownerEmail, hash, `${ownerFirstName || 'Admin'} ${ownerLastName || ''}`.trim()],
     )
 
-    res.json({ ok: true, organizationId: org.id, message: 'Organisation créée. Redémarrez Companion pour le seed des données de démonstration.' })
+    res.json({ ok: true, organizationId: org.id, message: 'Organisation créée — votre instance est prête.' })
   })
 
   return router

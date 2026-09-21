@@ -284,6 +284,18 @@ export const api = {
     }))
   },
 
+  async departments() {
+    return call<{ departments: { id: string; name: string }[] }>('/departments')
+  },
+
+  createDepartment(name: string) {
+    return command<{ department: { id: string; name: string } }>('/departments', { name })
+  },
+
+  createRole(input: { title: string; departmentId?: string; coverageTarget?: number }) {
+    return command<{ role: { id: string; title: string } }>('/roles', input)
+  },
+
   async role(id: string) {
     return call<{
       role: Record<string, unknown>

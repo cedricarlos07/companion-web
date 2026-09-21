@@ -43,7 +43,9 @@ async function main() {
   app.use(cookieParser())
   app.use(securityHeaders)
 
-  const autoSeed = process.env.AUTO_SEED !== '0'
+  // Seed de démonstration OPT-IN : les instances clients démarrent VIERGES et
+  // passent par l'assistant /setup. Mettre AUTO_SEED=1 pour une instance démo.
+  const autoSeed = process.env.AUTO_SEED === '1'
   if (autoSeed) {
     try {
       const result = await seedDatabase(dbh)
