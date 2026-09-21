@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 COPY src/ src/
-COPY public/ public/ 2>/dev/null || true
+COPY public/ public/
 COPY index.html tsconfig.json vite.config.ts app.config.ts ./
 COPY server/ server/
 RUN npx tsc --noEmit -p tsconfig.server.json || true
