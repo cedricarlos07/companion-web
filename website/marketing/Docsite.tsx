@@ -112,7 +112,7 @@ const DOCS: { group: string; articles: Article[] }[] = [
           { t: 'p', c: 'Une seule commande sur votre serveur :' },
           { t: 'code', c: 'curl -fsSL https://raw.githubusercontent.com/cedricarlos07/companion-web/main/install.sh | bash' },
           { t: 'p', c: 'Le script installe Docker si absent, génère vos secrets, tire les images officielles et démarre Companion. Instance **vierge** : l’assistant web (étape 5) fait le reste.' },
-          { t: 'note', tone: 'info', c: 'La licence `companion-license.lic` peut être passée au script (`COMPANION_LICENSE_FILE=… ./install.sh`) ou collée à la demande.' },
+          { t: 'note', tone: 'info', c: 'Pas de licence sous la main ? Importez-la ensuite dans **Facturation** — le fichier `.lic` est retéléchargeable à tout moment depuis le portail client.' },
           { t: 'h2', c: '3. Ouvrir' },
           { t: 'code', c: 'https://companion.votreentreprise.com' },
           { t: 'h2', c: '4. Importer votre licence' },
