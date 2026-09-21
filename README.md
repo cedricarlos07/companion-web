@@ -10,6 +10,7 @@ Companion transforme les documents, emails et conversations de votre entreprise 
 
 | Document | Pour qui | Où |
 |---|---|---|
+| **Guide de déploiement** — Hetzner, Contabo, Hostinger, OVH, Dokploy, Coolify, HTTPS, migration | DSI | [docs/deploiement.md](docs/deploiement.md) |
 | Guide utilisateur | Les équipes — chaque module, écran et action | [docs/guide-utilisateur.md](docs/guide-utilisateur.md) |
 | Matrice d'audit frontend | Dev — état anti-mock par route | [docs/FRONTEND-AUDIT.md](docs/FRONTEND-AUDIT.md) |
 | Guide administrateur (installation, licence, updates, backups) | DSI du client | Fourni par KamaLoka avec la licence (dépôt Control Center, non distribué) |
