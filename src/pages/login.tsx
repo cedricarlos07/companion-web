@@ -17,13 +17,13 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
   const [forgotSent, setForgotSent] = useState<string | null>(null)
 
-  // Instance vierge → l'assistant de configuration prend la main.
+  // Instance vierge : proposer discrètement la configuration initiale —
+  // jamais de redirection automatique des visiteurs vers l'assistant.
+  const [showSetupLink, setShowSetupLink] = useState(false)
   useEffect(() => {
     fetch('/api/setup/status')
       .then((r) => r.json())
-      .then((d: { needsSetup?: boolean }) => {
-        if (d.needsSetup) navigate('/setup', { replace: true })
-      })
+      .then((d: { needsSetup?: boolean }) => setShowSetupLink(d.needsSetup === true))
       .catch(() => undefined)
   }, [navigate])
 
@@ -132,6 +132,13 @@ export function LoginPage() {
             <Button type="button" variant="ghost" className="w-full justify-center" onClick={() => void forgot()}>
               Mot de passe oublié ?
             </Button>
+            {showSetupLink && (
+              <p className="pt-2 text-center">
+                <a href="/setup" className="text-caption-1-medium text-text-tertiary underline hover:text-text-secondary">
+                  Première installation ? Configurer l'instance
+                </a>
+              </p>
+            )}
           </form>
         </div>
       </div>

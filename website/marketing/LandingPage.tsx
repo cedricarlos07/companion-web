@@ -93,7 +93,7 @@ function Header() {
           ))}
         </div>
         <span className="flex-1" />
-        <ButtonLink variant="secondary" size="small" href="/portal/login" className="hidden sm:inline-flex">
+        <ButtonLink variant="secondary" size="small" href="/portal" className="hidden sm:inline-flex">
           <span className="hidden md:inline">Espace client</span>
           <span className="md:hidden">Client</span>
         </ButtonLink>
@@ -121,7 +121,7 @@ function Header() {
                 {label}
               </a>
             ))}
-            <a href="/portal/login" onClick={() => setOpen(false)}
+            <a href="/portal" onClick={() => setOpen(false)}
               className="rounded-lg px-2.5 py-2.5 text-body-medium font-semibold text-text-primary no-underline hover:bg-background-secondary-default">
               Espace client
             </a>
@@ -740,7 +740,7 @@ export function LandingPage() {
           </span>
           <span className="flex gap-4 text-caption-1-medium text-text-secondary">
             <a href="/docs" className="no-underline hover:text-text-primary">Documentation</a>
-            <a href="/portal/login" className="no-underline hover:text-text-primary">Portail client</a>
+            <a href="/portal" className="no-underline hover:text-text-primary">Portail client</a>
             <a href="mailto:contact@kamaloka.ai" className="no-underline hover:text-text-primary">contact@kamaloka.ai</a>
           </span>
         </div>

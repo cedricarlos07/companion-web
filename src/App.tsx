@@ -44,19 +44,15 @@ import { PortalSupportPage } from '@/pages/portal/support'
  * l'application. Instance vierge → assistant /setup. Sinon → /login.
  */
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<"checking" | "ok" | "setup" | "login">("checking")
+  const [state, setState] = useState<"checking" | "ok" | "login">("checking")
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         const me = await fetch("/api/auth/me", { credentials: "include" })
-        if (me.ok) {
-          if (!cancelled) setState("ok")
-          return
-        }
-        const setup = await fetch("/api/setup/status")
-        const body = (await setup.json().catch(() => null)) as { needsSetup?: boolean } | null
-        if (!cancelled) setState(body?.needsSetup ? "setup" : "login")
+        // Un visiteur non connecté va toujours vers /login — jamais vers
+        // l'assistant d'installation (réservé à l'admin via code).
+        if (!cancelled) setState(me.ok ? "ok" : "login")
       } catch {
         if (!cancelled) setState("login")
       }
@@ -71,7 +67,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
-  if (state === "setup") return <Navigate to="/setup" replace />
   if (state === "login") return <Navigate to="/login" replace />
   return <>{children}</>
 }
@@ -84,6 +79,7 @@ export default function App() {
           {/* Standalone surfaces (no app chrome) */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/setup" element={<SetupPage />} />
+          <Route path="/portal/login" element={<Navigate to="/portal" replace />} />
 
           {/* Portail Client KamaLoka — relation post-vente (licence, downloads,
            * instances, factures, support). Séparé de l'application Companion. */}

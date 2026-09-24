@@ -577,7 +577,7 @@ export function DocsPage() {
             <span className="text-body-2-medium text-text-tertiary">Documentation</span>
           </a>
           <a href="/landing" className="hidden text-body-2-medium text-text-secondary no-underline hover:text-text-primary sm:block">Site produit</a>
-          <a href="/portal/login" className="hidden text-body-2-medium text-text-secondary no-underline hover:text-text-primary sm:block">Portail client</a>
+          <a href="/portal" className="hidden text-body-2-medium text-text-secondary no-underline hover:text-text-primary sm:block">Portail client</a>
           <span className="flex-1" />
           <ButtonLink variant="primary" size="small" leadingIcon={adaptIcon(ArrowRight02Icon, 18)} href="#installation">
             Installer en 10 min
@@ -607,7 +607,7 @@ export function DocsPage() {
       </div>
 
       <footer className="border-t border-separator-border px-6 py-6 text-center text-caption-1-medium text-text-tertiary">
-        Companion — KamaLoka AI Technologies · <a href="/landing" className="text-accent-600 no-underline">Site produit</a> · <a href="/portal/login" className="text-accent-600 no-underline">Portail client</a>
+        Companion — KamaLoka AI Technologies · <a href="/landing" className="text-accent-600 no-underline">Site produit</a> · <a href="/portal" className="text-accent-600 no-underline">Portail client</a>
       </footer>
     </div>
   )

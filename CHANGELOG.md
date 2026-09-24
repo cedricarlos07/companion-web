@@ -1,5 +1,15 @@
 # Changelog — Companion
 
+## v1.0.11 (2026-09-21)
+
+Bonnes pratiques d'accès : les visiteurs ne sont jamais envoyés vers
+l'assistant d'installation.
+
+- Garde de session : un visiteur non connecté va toujours vers /login —
+  plus jamais vers /setup
+- Page de connexion : lien discret « Configurer l'instance » uniquement
+  quand l'instance est vierge (et protégée par le code d'installation)
+- /portal/login redirige vers /portal ; liens « Espace client » corrigés
 ## v1.0.10 (2026-09-21)
 
 Sécurité de l'assistant d'installation + corrections landing.
